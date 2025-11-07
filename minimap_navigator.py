@@ -314,6 +314,13 @@ class MinimapPathFinder:
         else:
             general_angle = narrow_path_angle
         
+        # Calculate clearness score if we have an angle
+        clearness = 0.0
+        if general_angle is not None:
+            angle_rad = math.radians(general_angle)
+            clearness = self._cast_ray(path_mask, player_pos[0], player_pos[1], 
+                                      angle_rad, self.config.look_ahead_distance)
+        
         # Check immediate surroundings for obstacles
         safety_check = self._check_immediate_area(obstacle_mask, player_pos)
         
@@ -322,7 +329,8 @@ class MinimapPathFinder:
             'narrow_path': narrow_path_angle is not None,
             'path_mask': path_mask,
             'obstacle_mask': obstacle_mask,
-            'is_safe': safety_check
+            'is_safe': safety_check,
+            'clearness': clearness
         }
     
     def _check_immediate_area(self, obstacle_mask: np.ndarray, 
