@@ -1,0 +1,22 @@
+{
+  "minimap_region": [1670, 50, 200, 200],
+  "path_color_lower": [80, 80, 80],
+  "path_color_upper": [255, 255, 255],
+  "obstacle_color_lower": [0, 0, 0],
+  "obstacle_color_upper": [80, 80, 80],
+  "movement_duration": 0.8,
+  "scan_interval": 0.2,
+  "look_ahead_distance": 40,
+  "turn_threshold": 20.0,
+  "stuck_threshold": 10,
+  "continuous_movement": true,
+  "_comment1": "minimap_region: [left, top, width, height] - Use configure_minimap.py to find exact values",
+  "_comment2": "path_color_lower/upper: BGR color range for walkable paths (lowered for better detection)",
+  "_comment3": "obstacle_color_lower/upper: BGR color range for obstacles",
+  "_comment4": "movement_duration: 0.8 = longer smooth movement (was 0.4)",
+  "_comment5": "scan_interval: 0.2 = faster responsive updates (was 0.4)",
+  "_comment6": "look_ahead_distance: 40 = look further ahead for planning (was 30)",
+  "_comment7": "turn_threshold: 20.0 = less sensitive turning for smoother motion (was 15.0)",
+  "_comment8": "stuck_threshold: 10 = more patient before unstuck action (was 5)",
+  "_comment9": "continuous_movement: true = keeps moving smoothly instead of stop-start"
+}

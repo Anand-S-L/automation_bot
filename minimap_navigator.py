@@ -29,11 +29,12 @@ class MinimapConfig:
     obstacle_color_upper: Tuple[int, int, int] = (80, 80, 80)
     
     # Navigation settings
-    movement_duration: float = 0.4
-    scan_interval: float = 0.4
-    look_ahead_distance: int = 30  # Pixels ahead to check on minimap
-    turn_threshold: float = 15.0  # Degrees before turning
-    stuck_threshold: int = 5  # Frames before considering stuck
+    movement_duration: float = 0.8  # Longer movement for smoother motion
+    scan_interval: float = 0.2  # Faster scanning for responsive movement
+    look_ahead_distance: int = 40  # Look further ahead
+    turn_threshold: float = 20.0  # Less sensitive turning
+    stuck_threshold: int = 10  # More frames before stuck detection
+    continuous_movement: bool = True  # Keep moving instead of stop-start
     
     @classmethod
     def from_file(cls, filepath: str):
@@ -101,17 +102,22 @@ class MinimapPathFinder:
                                 np.array(self.config.path_color_lower),
                                 np.array(self.config.path_color_upper))
         
-        # Method 2: Brightness-based (lighter = walkable)
+        # Method 2: Brightness-based (lighter = walkable) - more aggressive
         gray = cv2.cvtColor(minimap, cv2.COLOR_BGR2GRAY)
-        _, bright_mask = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
+        _, bright_mask = cv2.threshold(gray, 80, 255, cv2.THRESH_BINARY)  # Lower threshold for better detection
         
-        # Combine methods
+        # Method 3: Adaptive threshold for varying lighting
+        adaptive_mask = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                             cv2.THRESH_BINARY, 11, -2)
+        
+        # Combine all methods
         combined = cv2.bitwise_or(path_mask, bright_mask)
+        combined = cv2.bitwise_or(combined, adaptive_mask)
         
-        # Clean up with morphological operations
-        kernel = np.ones((3, 3), np.uint8)
-        combined = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, kernel)
-        combined = cv2.morphologyEx(combined, cv2.MORPH_OPEN, kernel)
+        # Clean up with morphological operations - less aggressive to preserve paths
+        kernel = np.ones((2, 2), np.uint8)
+        combined = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, kernel, iterations=2)
+        combined = cv2.morphologyEx(combined, cv2.MORPH_OPEN, kernel, iterations=1)
         
         return combined
     
@@ -318,15 +324,26 @@ class MinimapNavigator:
         else:
             keys_to_press = [direction]
         
-        # Press keys
+        # Press keys without releasing immediately for continuous movement
         for key in keys_to_press:
             pyautogui.keyDown(key)
         
+        # Hold for movement duration
         time.sleep(self.config.movement_duration)
         
-        # Release keys
-        for key in keys_to_press:
-            pyautogui.keyUp(key)
+        # Only release if we're not doing continuous movement
+        # Keys will be released before next direction or on stop
+        if not self.config.continuous_movement:
+            for key in keys_to_press:
+                pyautogui.keyUp(key)
+    
+    def release_all_movement_keys(self):
+        """Release all movement keys"""
+        for key in ['up', 'down', 'left', 'right']:
+            try:
+                pyautogui.keyUp(key)
+            except:
+                pass
     
     def adjust_camera(self, target_angle: float):
         """Rotate camera to face target direction using numpad keys"""
@@ -381,6 +398,7 @@ class MinimapNavigator:
     def _navigation_loop(self, debug: bool):
         """Main navigation loop"""
         frame_count = 0
+        last_direction = None
         
         while self.running:
             try:
@@ -398,30 +416,44 @@ class MinimapNavigator:
                 
                 if target_angle is None:
                     print("⚠ No clear path detected - rotating to search...")
+                    self.release_all_movement_keys()
                     pyautogui.keyDown('num6')
                     time.sleep(0.3)
                     pyautogui.keyUp('num6')
                     time.sleep(0.5)
+                    last_direction = None
                     continue
                 
                 # Display info
                 path_type = "NARROW PATH" if analysis['narrow_path'] else "OPEN AREA"
                 safety = "✓ SAFE" if analysis['is_safe'] else "⚠ CAUTION"
-                print(f"{safety} | {path_type} | Target: {target_angle:.1f}° | Frame: {frame_count}")
+                clearness = max(self.path_finder.analyze_directions(analysis['path_mask'], 8)) if 'path_mask' in analysis else 0.5
+                print(f"{safety} | {path_type} | Target: {target_angle:.1f}° | Clearness: {clearness:.2f} | Frame: {frame_count}")
                 
-                # Adjust camera if needed
-                self.adjust_camera(target_angle)
+                # Adjust camera if needed (but not too often)
+                if frame_count % 3 == 0:  # Only check camera every 3 frames
+                    self.adjust_camera(target_angle)
                 
-                # Move in recommended direction
+                # Get movement direction
                 direction = self.angle_to_direction(target_angle)
+                
+                # Only change keys if direction changed (for continuous movement)
+                if direction != last_direction:
+                    # Release old keys before pressing new ones
+                    self.release_all_movement_keys()
+                    time.sleep(0.05)  # Small delay for key release
+                    
+                # Move in recommended direction
                 self.move_direction(direction)
+                last_direction = direction
                 
                 # Debug visualization
                 if debug:
                     self._show_debug(minimap, analysis, target_angle)
                 
-                # Check if stuck
-                self._check_stuck()
+                # Check if stuck (but less aggressively)
+                if frame_count % 5 == 0:  # Only check every 5 frames
+                    self._check_stuck()
                 
                 # Wait before next iteration
                 time.sleep(self.config.scan_interval)
@@ -429,6 +461,7 @@ class MinimapNavigator:
                 
             except Exception as e:
                 print(f"Error in navigation loop: {e}")
+                self.release_all_movement_keys()
                 time.sleep(1)
     
     def _show_debug(self, minimap: np.ndarray, analysis: dict, target_angle: float):
@@ -483,7 +516,14 @@ class MinimapNavigator:
         self.stuck_counter += 1
         
         if self.stuck_counter > self.config.stuck_threshold:
-            print("⚠ Might be stuck - trying random direction...")
+            print("⚠ Might be stuck - trying to unstuck...")
+            self.release_all_movement_keys()
+            time.sleep(0.2)
+            # Back up a bit
+            pyautogui.keyDown('down')
+            time.sleep(0.3)
+            pyautogui.keyUp('down')
+            # Rotate
             pyautogui.keyDown('num6')
             time.sleep(0.5)
             pyautogui.keyUp('num6')
@@ -493,7 +533,8 @@ class MinimapNavigator:
         """Stop the navigator"""
         self.running = False
         # Release all arrow keys and numpad keys
-        for key in ['up', 'down', 'left', 'right', 'num4', 'num6', 'num8', 'num5']:
+        self.release_all_movement_keys()
+        for key in ['num4', 'num6', 'num8', 'num5']:
             try:
                 pyautogui.keyUp(key)
             except:
