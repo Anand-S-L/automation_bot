@@ -1,4 +1,5 @@
 {
+  "screen_region": [0, 0, 1920, 1080],
   "minimap_region": [1670, 50, 200, 200],
   "path_color_lower": [80, 80, 80],
   "path_color_upper": [255, 255, 255],
@@ -10,7 +11,8 @@
   "turn_threshold": 20.0,
   "stuck_threshold": 10,
   "continuous_movement": true,
-  "_comment1": "minimap_region: [left, top, width, height] - Use configure_minimap.py to find exact values",
+  "_comment0": "screen_region: [left, top, width, height] - The game window position. Use configure_screen.py to find this for your BlueStacks window",
+  "_comment1": "minimap_region: [left, top, width, height] - ABSOLUTE screen coordinates. Use configure_minimap.py to find exact values",
   "_comment2": "path_color_lower/upper: BGR color range for walkable paths (lowered for better detection)",
   "_comment3": "obstacle_color_lower/upper: BGR color range for obstacles",
   "_comment4": "movement_duration: 0.8 = longer smooth movement (was 0.4)",

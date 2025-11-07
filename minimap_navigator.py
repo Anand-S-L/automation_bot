@@ -17,7 +17,11 @@ import math
 @dataclass
 class MinimapConfig:
     """Configuration for minimap-based navigation"""
-    # Minimap location on screen (Evil Lands: top-right corner, largest circle, slightly down from top)
+    # Screen/window region to capture from (entire game window)
+    # [left, top, width, height] - Use configure_screen.py to find this
+    screen_region: Tuple[int, int, int, int] = (0, 0, 1920, 1080)  # Full screen default
+    
+    # Minimap location RELATIVE to screen_region (Evil Lands: top-right corner, largest circle, slightly down from top)
     # For BlueStacks 1920x1080: approximately [1670, 50, 200, 200]
     minimap_region: Tuple[int, int, int, int] = (1670, 50, 200, 200)  # (left, top, width, height)
     
@@ -42,7 +46,7 @@ class MinimapConfig:
         try:
             with open(filepath, 'r') as f:
                 config_dict = json.load(f)
-                # Convert lists to tuples for color values
+                # Convert lists to tuples for color values and regions
                 if 'path_color_lower' in config_dict:
                     config_dict['path_color_lower'] = tuple(config_dict['path_color_lower'])
                 if 'path_color_upper' in config_dict:
@@ -53,6 +57,8 @@ class MinimapConfig:
                     config_dict['obstacle_color_upper'] = tuple(config_dict['obstacle_color_upper'])
                 if 'minimap_region' in config_dict:
                     config_dict['minimap_region'] = tuple(config_dict['minimap_region'])
+                if 'screen_region' in config_dict:
+                    config_dict['screen_region'] = tuple(config_dict['screen_region'])
                 return cls(**config_dict)
         except FileNotFoundError:
             return cls()
