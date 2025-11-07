@@ -1,6 +1,6 @@
 # Autonomous Game Navigator 🎮🤖
 
-An intelligent bot framework for autonomous navigation in open-world games with real-time obstacle detection and avoidance.
+An intelligent bot framework for autonomous navigation in open-world games with real-time obstacle detection and avoidance. Specifically designed for Evil Lands running on **BlueStacks emulator**.
 
 ## ⚠️ Important Disclaimer
 
@@ -10,6 +10,35 @@ An intelligent bot framework for autonomous navigation in open-world games with 
 - May be considered cheating in multiplayer environments
 
 Use this framework responsibly and only in single-player or test environments where automation is permitted.
+
+## 🚀 Quick Start
+
+### For BlueStacks Emulator Users (Recommended)
+
+See **[BLUESTACKS_SETUP.md](BLUESTACKS_SETUP.md)** for complete setup guide!
+
+**TL;DR:**
+```powershell
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Configure minimap (first time only)
+python configure_minimap.py
+
+# 3. Run the bot
+python minimap_navigator.py
+```
+
+### 📚 Documentation
+
+- **[QUICKSTART.md](QUICKSTART.md)** - ⚡ Quick reference card (START HERE!)
+- **[BLUESTACKS_SETUP.md](BLUESTACKS_SETUP.md)** - Complete BlueStacks emulator setup guide
+- **[MINIMAP_LOCATION.md](MINIMAP_LOCATION.md)** - 📍 Visual guide to find the minimap (top-right corner!)
+- **[MINIMAP_GUIDE.md](MINIMAP_GUIDE.md)** - How minimap navigation works
+- **[CONTROLS.md](CONTROLS.md)** - Control scheme (Arrow keys + Numpad)
+- **[README.md](README.md)** - This file (general overview)
+
+---
 
 ## 🌟 Features
 
@@ -52,13 +81,13 @@ Screen → Grayscale → Darkness Detection
 
 - Python 3.8 or higher
 - Windows, macOS, or Linux
+- **BlueStacks emulator** (for Evil Lands)
 - Game that can run in windowed mode (recommended)
 
 ## 🔧 Installation
 
-1. **Clone or download this repository**
+### Step 1: Install Python Packages
 
-2. **Install required packages**:
 ```powershell
 pip install -r requirements.txt
 ```
@@ -69,6 +98,14 @@ The required packages are:
 - `mss` - Fast screen capture
 - `pyautogui` - Input simulation
 - `pillow` - Image manipulation
+
+### Step 2: Configure for Your Setup
+
+**For BlueStacks:** See [BLUESTACKS_SETUP.md](BLUESTACKS_SETUP.md)
+
+**For PC Games:** Continue with configuration below
+
+---
 
 ## ⚙️ Configuration
 

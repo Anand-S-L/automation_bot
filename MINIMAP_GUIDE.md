@@ -19,6 +19,8 @@ Looking at your Evil Lands screenshot, the minimap shows:
 3. **Green dot** = Your character
 4. **Narrow lines** = Trails and pathways
 
+**Location:** The minimap in Evil Lands is the **largest circle on the top-right corner**, positioned **slightly down** from the very top edge of the screen.
+
 The bot:
 1. Captures just the minimap region (top-left circle in your game)
 2. Detects light paths vs dark obstacles
@@ -70,12 +72,19 @@ The `configure_minimap.py` tool creates `config_minimap.json`:
 
 ### For Evil Lands Specifically:
 
-Based on your screenshot, the minimap appears to be in the **top-left corner**. You'll need to:
+Based on your screenshot, the minimap appears to be in the **top-right corner** (not top-left!). You'll need to:
 
 1. Find exact coordinates using `configure_minimap.py`
-2. The minimap has a circular shape - the tool captures a square around it (okay)
-3. Paths look **lighter/brighter** than obstacles
-4. May need to filter out the circular border
+2. Look for the **largest circle** on the top-right - that's your minimap
+3. It's positioned **slightly down** from the very top edge
+4. The minimap has a circular shape - the tool captures a square around it (okay)
+5. Paths look **lighter/brighter** than obstacles
+6. May need to filter out the circular border
+
+**Typical coordinates for 1920x1080:**
+```json
+"minimap_region": [1670, 50, 200, 200]
+```
 
 ## 🎯 Navigation Features
 

@@ -6,9 +6,10 @@
   "turn_angle": 45,
   "exploration_bias": 0.7,
   "_comment1": "screen_region: [left, top, width, height] - adjust to match your game window",
-  "_comment2": "movement_duration: how long to hold movement keys (seconds)",
-  "_comment3": "scan_interval: time between screen scans (seconds)",
-  "_comment4": "obstacle_threshold: 0-255, lower = more sensitive to dark obstacles",
-  "_comment5": "turn_angle: degrees to rotate camera when stuck",
-  "_comment6": "exploration_bias: 0-1, higher = prefer unexplored areas"
+  "_comment2": "For Evil Lands on BlueStacks 1920x1080, minimap is on TOP-RIGHT corner at approx [1670, 50, 200, 200]",
+  "_comment3": "movement_duration: how long to hold movement keys (seconds)",
+  "_comment4": "scan_interval: time between screen scans (seconds)",
+  "_comment5": "obstacle_threshold: 0-255, lower = more sensitive to dark obstacles",
+  "_comment6": "turn_angle: degrees to rotate camera when stuck",
+  "_comment7": "exploration_bias: 0-1, higher = prefer unexplored areas"
 }

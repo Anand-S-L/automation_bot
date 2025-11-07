@@ -17,8 +17,9 @@ import math
 @dataclass
 class MinimapConfig:
     """Configuration for minimap-based navigation"""
-    # Minimap location on screen (adjust for Evil Lands)
-    minimap_region: Tuple[int, int, int, int] = (50, 50, 200, 200)  # (left, top, width, height)
+    # Minimap location on screen (Evil Lands: top-right corner, largest circle, slightly down from top)
+    # For BlueStacks 1920x1080: approximately [1670, 50, 200, 200]
+    minimap_region: Tuple[int, int, int, int] = (1670, 50, 200, 200)  # (left, top, width, height)
     
     # Path detection colors (adjust based on minimap colors)
     path_color_lower: Tuple[int, int, int] = (100, 100, 100)  # Light areas = paths
