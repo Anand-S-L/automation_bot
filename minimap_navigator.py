@@ -80,7 +80,22 @@ class MinimapCapture:
     
     def preprocess(self, img: np.ndarray) -> np.ndarray:
         """Preprocess minimap for better path detection"""
-        # Remove UI elements (circles, icons) if needed
+        # Enhance contrast to compensate for transparency
+        # Convert to LAB color space for better contrast adjustment
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization) to L channel
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        
+        # Merge channels and convert back to BGR
+        enhanced_lab = cv2.merge([l, a, b])
+        img = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+        
+        # Increase overall brightness and contrast
+        img = cv2.convertScaleAbs(img, alpha=1.3, beta=10)  # alpha=contrast, beta=brightness
+        
         # Apply slight blur to reduce noise
         img = cv2.GaussianBlur(img, (3, 3), 0)
         return img
@@ -240,6 +255,13 @@ class MinimapPathFinder:
         # Detect paths and obstacles
         path_mask = self.detect_paths(minimap)
         obstacle_mask = self.detect_obstacles(minimap)
+        
+        # Mask out the character indicator at center (yellow arrow + light cone)
+        # This prevents the bot from detecting the character's direction indicator as an obstacle
+        center_x, center_y = player_pos
+        mask_radius = 20  # Adjust this if the character indicator is larger/smaller
+        cv2.circle(path_mask, (center_x, center_y), mask_radius, 0, -1)  # Fill with 0 (black)
+        cv2.circle(obstacle_mask, (center_x, center_y), mask_radius, 0, -1)  # Fill with 0 (black)
         
         # Try narrow path following first (more precise)
         narrow_path_angle = self.follow_narrow_path(path_mask, player_pos)
