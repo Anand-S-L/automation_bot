@@ -410,12 +410,59 @@ class HealthDetector:
     
     def _detect_by_region(self, screen: np.ndarray) -> HealthManaState:
         """
-        Detect bars using fixed screen regions (LEGACY - use detect() instead)
-        
-        This method is deprecated. Use detect() which includes OCR support.
+        Detect bars using fixed screen regions (no recursion)
         """
-        # Redirect to the main detect method which has full functionality
-        return self.detect(screen)
+        try:
+            # Extract HP bar region
+            hp_x, hp_y, hp_w, hp_h = self.hp_bar_region
+            hp_roi = screen[hp_y:hp_y+hp_h, hp_x:hp_x+hp_w]
+            hp_percentage = self._analyze_bar_fill(hp_roi, 'red')
+
+            # Extract XP bar region
+            xp_x, xp_y, xp_w, xp_h = self.xp_bar_region
+            xp_roi = screen[xp_y:xp_y+xp_h, xp_x:xp_x+xp_w]
+            xp_percentage = self._analyze_bar_fill(xp_roi, 'blue')
+
+            # Try to read HP/XP numbers via OCR
+            hp_current, hp_max = self._read_hp_numbers(screen)
+            xp_current, xp_max = self._read_xp_numbers(screen)
+
+            if hp_current > 0 and hp_max > 0:
+                hp_percentage = (hp_current / hp_max) * 100.0
+            if xp_current > 0 and xp_max > 0:
+                xp_percentage = (xp_current / xp_max) * 100.0
+
+            detected = hp_percentage is not None and xp_percentage is not None
+            if not detected:
+                return HealthManaState(
+                    health_percentage=100.0,
+                    health_current=0,
+                    health_max=0,
+                    xp_percentage=0.0,
+                    xp_current=0,
+                    xp_max=0,
+                    is_low_health=False,
+                    is_critical=False,
+                    detected=False
+                )
+
+            is_low_health = hp_percentage < self.low_health_threshold
+            is_critical = hp_percentage < self.critical_health_threshold
+
+            return HealthManaState(
+                health_percentage=hp_percentage or 100.0,
+                health_current=hp_current,
+                health_max=hp_max,
+                xp_percentage=xp_percentage or 0.0,
+                xp_current=xp_current,
+                xp_max=xp_max,
+                is_low_health=is_low_health,
+                is_critical=is_critical,
+                detected=True
+            )
+        except Exception as e:
+            print(f"[HealthDetector] Region detection error: {e}")
+            return HealthManaState(100.0, 0, 0, 0.0, 0, 0, False, False, False)
     
     def _analyze_bar_region(self, roi: np.ndarray, color: str) -> Optional[float]:
         """Analyze a bar region for fill percentage (LEGACY - redirects to _analyze_bar_fill)"""
@@ -429,7 +476,8 @@ class HealthDetector:
         TODO: Implement when we have templates
         """
         print("[HealthDetector] Template detection not yet implemented")
-        return self._detect_by_color(screen)
+        # Fallback to region detection if template not implemented
+        return self._detect_by_region(screen)
     
     def calibrate(self, screen: np.ndarray, manual_regions: Optional[Dict] = None):
         """
