@@ -1,0 +1,16 @@
+# Requirements for RL Farming Agent
+
+# Deep Learning
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Already installed (from previous setup)
+opencv-python>=4.8.0
+numpy>=1.24.0
+mss>=9.0.0
+pyautogui>=0.9.54
+pillow>=10.0.0
+
+# Optional but recommended for better performance
+# tensorboard>=2.14.0  # For training visualization
+# matplotlib>=3.7.0    # For plotting rewards
