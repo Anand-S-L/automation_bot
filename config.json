@@ -1,0 +1,14 @@
+{
+  "screen_region": [0, 0, 1920, 1080],
+  "movement_duration": 0.3,
+  "scan_interval": 0.5,
+  "obstacle_threshold": 50,
+  "turn_angle": 45,
+  "exploration_bias": 0.7,
+  "_comment1": "screen_region: [left, top, width, height] - adjust to match your game window",
+  "_comment2": "movement_duration: how long to hold movement keys (seconds)",
+  "_comment3": "scan_interval: time between screen scans (seconds)",
+  "_comment4": "obstacle_threshold: 0-255, lower = more sensitive to dark obstacles",
+  "_comment5": "turn_angle: degrees to rotate camera when stuck",
+  "_comment6": "exploration_bias: 0-1, higher = prefer unexplored areas"
+}
