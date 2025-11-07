@@ -545,8 +545,10 @@ class MinimapNavigator:
         cv2.putText(combined, "Obstacles", (width * 2 * scale + 10, 30),
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
         
-        cv2.imshow('Minimap Navigator Debug', combined)
-        cv2.waitKey(1)
+        # Debug window disabled to prevent blocking navigation
+        # Uncomment these lines if you need to see the debug visualization:
+        # cv2.imshow('Minimap Navigator Debug', combined)
+        # cv2.waitKey(1)
     
     def _check_stuck(self):
         """Check if bot is stuck and take corrective action"""
