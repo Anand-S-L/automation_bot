@@ -90,7 +90,7 @@ Config: "minimap_region": [1350, 40, 175, 175]
 
 ## How to Find Exact Coordinates
 
-### Step-by-Step:
+### Step-by-Step (Improved Method):
 
 1. **Open BlueStacks** with Evil Lands running
 2. **Make sure minimap is visible** (check game settings)
@@ -99,17 +99,24 @@ Config: "minimap_region": [1350, 40, 175, 175]
    python configure_minimap.py
    ```
 
-4. **When prompted:**
-   - Move mouse to the **top-left corner** of the minimap circle
+4. **When prompted (NEW METHOD):**
+   - Move mouse to the **CENTER** of the minimap circle
    - Press Enter
-   - Move mouse to the **bottom-right corner** of the minimap circle
+   - Move mouse to any point on the **EDGE** of the minimap (top, bottom, left, or right)
    - Press Enter
 
 5. **The tool will:**
-   - Calculate exact coordinates
+   - Calculate the radius automatically
+   - Create a bounding box around the circle
    - Capture the minimap
-   - Analyze colors
+   - Analyze colors (only within the circular area)
    - Create `config_minimap.json` automatically
+
+**Why this method is better:**
+- ✅ No need to find exact corners
+- ✅ Works perfectly with circular minimaps
+- ✅ Avoids index errors when clicking
+- ✅ More accurate and easier!
 
 ## Visual Markers to Look For
 

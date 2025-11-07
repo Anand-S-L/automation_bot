@@ -21,22 +21,33 @@ def find_minimap_region():
     print("   Look for the LARGEST CIRCLE on the top-right")
     print("   It's positioned SLIGHTLY DOWN from the very top edge\n")
     
-    print("1. Move mouse to TOP-LEFT corner of the minimap circle")
+    print("Since the minimap is CIRCULAR, we'll use center + radius method:\n")
+    
+    print("1. Move mouse to the CENTER of the minimap circle")
     print("   Press Enter when ready...")
     input()
-    top_left = pyautogui.position()
-    print(f"   ✓ Top-Left: ({top_left.x}, {top_left.y})")
+    center = pyautogui.position()
+    print(f"   ✓ Center: ({center.x}, {center.y})")
     
-    print("\n2. Move mouse to BOTTOM-RIGHT corner of the minimap circle")
+    print("\n2. Move mouse to any point on the EDGE of the minimap circle")
+    print("   (Top, bottom, left, or right edge - any point on the circle)")
     print("   Press Enter when ready...")
     input()
-    bottom_right = pyautogui.position()
-    print(f"   ✓ Bottom-Right: ({bottom_right.x}, {bottom_right.y})")
+    edge = pyautogui.position()
+    print(f"   ✓ Edge: ({edge.x}, {edge.y})")
     
-    left = top_left.x
-    top = top_left.y
-    width = bottom_right.x - top_left.x
-    height = bottom_right.y - top_left.y
+    # Calculate radius
+    import math
+    radius = int(math.sqrt((edge.x - center.x)**2 + (edge.y - center.y)**2))
+    print(f"\n   📐 Calculated radius: {radius} pixels")
+    
+    # Calculate bounding box (square around circle)
+    left = center.x - radius
+    top = center.y - radius
+    width = radius * 2
+    height = radius * 2
+    
+    print(f"\n   📦 Bounding box: [{left}, {top}, {width}, {height}]")
     
     return (left, top, width, height)
 
@@ -66,6 +77,17 @@ def calibrate_colors(minimap_region):
     # Save original
     cv2.imwrite('minimap_original.png', minimap)
     print("\n✓ Saved minimap as 'minimap_original.png'")
+    print(f"   Minimap size: {minimap.shape[1]}x{minimap.shape[0]} pixels")
+    
+    # Create circular mask (since minimap is circular)
+    height, width = minimap.shape[:2]
+    center_x, center_y = width // 2, height // 2
+    radius = min(width, height) // 2 - 5  # Slightly smaller to avoid border
+    
+    mask = np.zeros((height, width), dtype=np.uint8)
+    cv2.circle(mask, (center_x, center_y), radius, 255, -1)
+    
+    print(f"   Circular mask: center=({center_x}, {center_y}), radius={radius}")
     
     # Analyze color ranges
     print("\n4. Analyzing minimap colors...")
@@ -73,10 +95,14 @@ def calibrate_colors(minimap_region):
     # Create HSV version for better analysis
     hsv = cv2.cvtColor(minimap, cv2.COLOR_BGR2HSV)
     
-    # Analyze brightness
+    # Analyze brightness (only within circular area)
     gray = cv2.cvtColor(minimap, cv2.COLOR_BGR2GRAY)
-    mean_brightness = np.mean(gray)
-    std_brightness = np.std(gray)
+    gray_masked = cv2.bitwise_and(gray, gray, mask=mask)
+    
+    # Calculate stats only for non-zero (inside circle) pixels
+    non_zero_pixels = gray_masked[mask > 0]
+    mean_brightness = np.mean(non_zero_pixels)
+    std_brightness = np.std(non_zero_pixels)
     
     print(f"\n   Average brightness: {mean_brightness:.1f}")
     print(f"   Brightness variation: {std_brightness:.1f}")
@@ -85,26 +111,35 @@ def calibrate_colors(minimap_region):
     print("\n5. Creating sample masks...")
     
     # Light areas (potential paths)
-    _, bright_mask = cv2.threshold(gray, mean_brightness + std_brightness * 0.3, 255, cv2.THRESH_BINARY)
+    _, bright_mask = cv2.threshold(gray_masked, mean_brightness + std_brightness * 0.3, 255, cv2.THRESH_BINARY)
     cv2.imwrite('minimap_bright_areas.png', bright_mask)
     
     # Dark areas (potential obstacles)
-    _, dark_mask = cv2.threshold(gray, mean_brightness - std_brightness * 0.3, 255, cv2.THRESH_BINARY_INV)
+    _, dark_mask = cv2.threshold(gray_masked, mean_brightness - std_brightness * 0.3, 255, cv2.THRESH_BINARY_INV)
     cv2.imwrite('minimap_dark_areas.png', dark_mask)
     
     print("   ✓ Saved 'minimap_bright_areas.png' (potential paths)")
     print("   ✓ Saved 'minimap_dark_areas.png' (potential obstacles)")
     
-    # Interactive color picker
+    # Interactive color picker with bounds checking
     def mouse_callback(event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
-            bgr = minimap[y, x]
-            hsv_val = hsv[y, x]
-            print(f"\n   Clicked pixel - BGR: {bgr}, HSV: {hsv_val}")
+            # Convert coordinates back to original minimap size
+            orig_x = x // 3
+            orig_y = y // 3
+            
+            # Bounds checking to prevent index errors
+            if 0 <= orig_y < minimap.shape[0] and 0 <= orig_x < minimap.shape[1]:
+                bgr = minimap[orig_y, orig_x]
+                hsv_val = hsv[orig_y, orig_x]
+                print(f"\n   Clicked at ({orig_x}, {orig_y}) - BGR: {bgr}, HSV: {hsv_val}")
+            else:
+                print(f"\n   ⚠ Click outside minimap bounds! ({orig_x}, {orig_y})")
     
     print("\n6. Click on different minimap areas to see their colors:")
     print("   - Click on PATHS (walkable areas)")
     print("   - Click on OBSTACLES (walls, blocked areas)")
+    print("   - Click INSIDE the circular minimap area")
     print("   - Press ESC when done")
     
     # Show minimap with interactive color picker

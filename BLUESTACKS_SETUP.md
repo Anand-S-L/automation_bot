@@ -114,12 +114,13 @@ python configure_minimap.py
 ```
 
 **What this does:**
-1. Asks you to click **top-left corner** of the minimap
-2. Asks you to click **bottom-right corner** of the minimap
-3. Captures the minimap image
-4. Auto-detects path colors
-5. Creates `config_minimap.json`
-6. Shows preview to verify detection
+1. Asks you to click **center** of the minimap circle
+2. Asks you to click any point on the **edge** of the circle
+3. Automatically calculates the bounding box
+4. Captures the minimap image
+5. Auto-detects path colors (only within circular area)
+6. Creates `config_minimap.json`
+7. Shows preview to verify detection
 
 **Important Tips for BlueStacks:**
 - The minimap in Evil Lands is in the **top-right corner**

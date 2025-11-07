@@ -10,13 +10,20 @@ pip install -r requirements.txt
 ## First-Time Configuration
 
 ```powershell
-# Find and configure minimap location
+# Find and configure minimap ## Links to Full Documentation
+
+- 📘 **[BLUESTACKS_SETUP.md](BLUESTACKS_SETUP.md)** - Step-by-step BlueStacks setup
+- 📍 **[MINIMAP_LOCATION.md](MINIMAP_LOCATION.md)** - Visual guide: Where is the minimap?
+- 🗺️ **[MINIMAP_GUIDE.md](MINIMAP_GUIDE.md)** - How minimap navigation works
+- 🎮 **[CONTROLS.md](CONTROLS.md)** - Complete control scheme guide
+- 🔧 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Fix common issues
+- 📖 **[README.md](README.md)** - General project overviewn
 python configure_minimap.py
 ```
 
 Follow prompts to:
-1. Click top-left corner of minimap
-2. Click bottom-right corner of minimap
+1. Click center of the minimap circle
+2. Click any point on the edge of the circle
 3. Wait for auto-calibration
 4. Verify generated images
 

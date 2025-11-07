@@ -36,6 +36,7 @@ python minimap_navigator.py
 - **[MINIMAP_LOCATION.md](MINIMAP_LOCATION.md)** - 📍 Visual guide to find the minimap (top-right corner!)
 - **[MINIMAP_GUIDE.md](MINIMAP_GUIDE.md)** - How minimap navigation works
 - **[CONTROLS.md](CONTROLS.md)** - Control scheme (Arrow keys + Numpad)
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - 🔧 Common issues and solutions
 - **[README.md](README.md)** - This file (general overview)
 
 ---
