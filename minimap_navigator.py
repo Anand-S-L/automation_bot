@@ -123,47 +123,67 @@ class MinimapPathFinder:
     
     def detect_paths(self, minimap: np.ndarray) -> np.ndarray:
         """
-        Detect walkable paths on minimap
-        Returns binary mask: 1 = path, 0 = obstacle
+        NEW APPROACH: Edge-based path detection using distance transform
+        This finds areas furthest from walls/obstacles = safe paths
+        Returns distance map: higher values = safer/wider paths
         """
-        # Method 1: Color-based detection
-        path_mask = cv2.inRange(minimap, 
-                                np.array(self.config.path_color_lower),
-                                np.array(self.config.path_color_upper))
-        
-        # Method 2: Brightness-based (lighter = walkable) - more aggressive
+        # Convert to grayscale
         gray = cv2.cvtColor(minimap, cv2.COLOR_BGR2GRAY)
-        _, bright_mask = cv2.threshold(gray, 80, 255, cv2.THRESH_BINARY)  # Lower threshold for better detection
         
-        # Method 3: Adaptive threshold for varying lighting
-        adaptive_mask = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                             cv2.THRESH_BINARY, 11, -2)
+        # Apply bilateral filter to reduce noise while preserving edges
+        denoised = cv2.bilateralFilter(gray, 9, 75, 75)
         
-        # Combine all methods
-        combined = cv2.bitwise_or(path_mask, bright_mask)
-        combined = cv2.bitwise_or(combined, adaptive_mask)
+        # Detect edges (walls, obstacles, terrain boundaries)
+        # Using Canny edge detection - this finds all boundaries
+        edges = cv2.Canny(denoised, 30, 100)
         
-        # Clean up with morphological operations - less aggressive to preserve paths
-        kernel = np.ones((2, 2), np.uint8)
-        combined = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, kernel, iterations=2)
-        combined = cv2.morphologyEx(combined, cv2.MORPH_OPEN, kernel, iterations=1)
+        # Dilate edges slightly to make walls thicker (safer navigation)
+        kernel = np.ones((3, 3), np.uint8)
+        thick_edges = cv2.dilate(edges, kernel, iterations=2)
         
-        return combined
+        # Invert: now edges are 0 (obstacles), open areas are 255
+        inverted = cv2.bitwise_not(thick_edges)
+        
+        # Distance Transform: each pixel gets value = distance to nearest edge
+        # Areas far from walls get high values = safe paths!
+        distance_map = cv2.distanceTransform(inverted, cv2.DIST_L2, 5)
+        
+        # Normalize to 0-255 range for visualization
+        cv2.normalize(distance_map, distance_map, 0, 255, cv2.NORM_MINMAX)
+        distance_map = np.uint8(distance_map)
+        
+        # Threshold to get only "safe" areas (far enough from walls)
+        # Higher threshold = only very safe areas, lower = more permissive
+        _, safe_paths = cv2.threshold(distance_map, 20, 255, cv2.THRESH_BINARY)
+        
+        return safe_paths
     
     def detect_obstacles(self, minimap: np.ndarray) -> np.ndarray:
         """
-        Detect obstacles on minimap
-        Returns binary mask: 1 = obstacle, 0 = clear
+        NEW APPROACH: Edge-based obstacle detection
+        Detects walls, barriers, and impassable terrain
+        Returns binary mask: 255 = obstacle/wall, 0 = clear
         """
-        obstacle_mask = cv2.inRange(minimap,
-                                    np.array(self.config.obstacle_color_lower),
-                                    np.array(self.config.obstacle_color_upper))
+        # Convert to grayscale
+        gray = cv2.cvtColor(minimap, cv2.COLOR_BGR2GRAY)
         
-        # Expand obstacles slightly for safety margin
+        # Denoise
+        denoised = cv2.bilateralFilter(gray, 9, 75, 75)
+        
+        # Detect edges - these are walls and obstacles
+        edges = cv2.Canny(denoised, 30, 100)
+        
+        # Make obstacles thicker for safety margin
         kernel = np.ones((5, 5), np.uint8)
-        obstacle_mask = cv2.dilate(obstacle_mask, kernel, iterations=1)
+        obstacles = cv2.dilate(edges, kernel, iterations=2)
         
-        return obstacle_mask
+        # Also detect very dark areas (often obstacles in minimaps)
+        _, dark_areas = cv2.threshold(gray, 40, 255, cv2.THRESH_BINARY_INV)
+        
+        # Combine edges and dark areas
+        combined_obstacles = cv2.bitwise_or(obstacles, dark_areas)
+        
+        return combined_obstacles
     
     def find_path_direction(self, path_mask: np.ndarray, 
                            player_pos: Tuple[int, int],
@@ -299,9 +319,16 @@ class MinimapPathFinder:
         debug_minimap = minimap.copy()
         cv2.drawContours(debug_minimap, [triangle_points], 0, (255, 0, 255), 2)  # Purple triangle
         cv2.circle(debug_minimap, (center_x, center_y), mask_radius, (255, 0, 255), 2)  # Purple circle
-        cv2.imwrite('debug_minimap_with_mask.png', debug_minimap)
-        cv2.imwrite('debug_path_mask.png', path_mask)
-        cv2.imwrite('debug_obstacle_mask.png', obstacle_mask)
+        
+        # Save debug images
+        cv2.imwrite('debug_1_original_minimap.png', debug_minimap)
+        cv2.imwrite('debug_2_detected_paths.png', path_mask)
+        cv2.imwrite('debug_3_detected_obstacles.png', obstacle_mask)
+        
+        # Create an enhanced visualization showing edges
+        gray = cv2.cvtColor(minimap, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 30, 100)
+        cv2.imwrite('debug_4_detected_edges.png', edges)
         
         # Try narrow path following first (more precise)
         narrow_path_angle = self.follow_narrow_path(path_mask, player_pos)
