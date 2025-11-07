@@ -31,11 +31,14 @@ class EnhancedGameState:
     screen: np.ndarray
     minimap: np.ndarray
     
-    # Health/Mana (from HealthDetector)
+    # Health/XP (from HealthDetector)
     health_percentage: float
-    mana_percentage: float
+    health_current: int
+    health_max: int
+    xp_percentage: float
+    xp_current: int
+    xp_max: int
     is_low_health: bool
-    is_low_mana: bool
     is_critical: bool
     
     # Enemies (from EnemyDetector)
@@ -61,13 +64,12 @@ class EnhancedGameState:
         Convert to fixed-size state vector for neural network
         
         Returns:
-            State vector [health, mana, enemy_count, has_target, distance, ...]
+            State vector [health, xp_progress, enemy_count, has_target, distance, ...]
         """
         return np.array([
             self.health_percentage / 100.0,
-            self.mana_percentage / 100.0,
+            self.xp_percentage / 100.0,  # XP progress (not mana)
             float(self.is_low_health),
-            float(self.is_low_mana),
             float(self.is_critical),
             min(self.enemy_count / 10.0, 1.0),  # Normalize to 0-1
             float(self.has_target),
@@ -282,9 +284,12 @@ class EnhancedFarmingAgent:
             screen=screen,
             minimap=minimap,
             health_percentage=health_state.health_percentage,
-            mana_percentage=health_state.mana_percentage,
+            health_current=health_state.health_current,
+            health_max=health_state.health_max,
+            xp_percentage=health_state.xp_percentage,
+            xp_current=health_state.xp_current,
+            xp_max=health_state.xp_max,
             is_low_health=health_state.is_low_health,
-            is_low_mana=health_state.is_low_mana,
             is_critical=health_state.is_critical,
             enemy_count=enemy_state.enemy_count,
             has_target=enemy_state.has_target,

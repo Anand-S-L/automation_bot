@@ -83,7 +83,7 @@ class HealthDetector:
         
         # Caching
         self.last_hp_region = None
-        self.last_mana_region = None
+        self.last_xp_region = None  # Changed from last_mana_region
         
         print(f"[HealthDetector] Initialized with mode: {self.detection_mode}")
         print(f"[HealthDetector] HP bar region: {self.hp_bar_region}")
@@ -331,19 +331,19 @@ class HealthDetector:
             return None
     
     def _find_blue_bar_percentage(self, hsv: np.ndarray) -> Optional[float]:
-        """Find mana bar and calculate percentage"""
+        """Find XP bar and calculate percentage (LEGACY - use detect() instead)"""
         try:
-            # Create mask for blue
-            mana_mask = cv2.inRange(hsv, self.mana_color_lower, self.mana_color_upper)
+            # Create mask for blue (XP bar)
+            xp_mask = cv2.inRange(hsv, self.xp_color_lower, self.xp_color_upper)
             
             # If we have a known region, use it
-            if self.mana_bar_region:
-                x, y, w, h = self.mana_bar_region
-                mana_mask = mana_mask[y:y+h, x:x+w]
-                return self._calculate_bar_percentage(mana_mask, orientation='horizontal')
+            if self.xp_bar_region:
+                x, y, w, h = self.xp_bar_region
+                xp_mask = xp_mask[y:y+h, x:x+w]
+                return self._calculate_bar_percentage(xp_mask, orientation='horizontal')
             
             # Otherwise, find largest blue contour
-            contours, _ = cv2.findContours(mana_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours, _ = cv2.findContours(xp_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
             if not contours:
                 return None
@@ -358,10 +358,10 @@ class HealthDetector:
                 return None
             
             # Cache region
-            self.last_mana_region = (x, y, w, h)
+            self.last_xp_region = (x, y, w, h)
             
             # Calculate percentage
-            roi = mana_mask[y:y+h, x:x+w]
+            roi = xp_mask[y:y+h, x:x+w]
             return self._calculate_bar_percentage(roi, orientation='horizontal')
             
         except Exception as e:
@@ -410,56 +410,16 @@ class HealthDetector:
     
     def _detect_by_region(self, screen: np.ndarray) -> HealthManaState:
         """
-        Detect bars using fixed screen regions
+        Detect bars using fixed screen regions (LEGACY - use detect() instead)
         
-        Faster but requires manual configuration
+        This method is deprecated. Use detect() which includes OCR support.
         """
-        try:
-            if not self.hp_bar_region or not self.mana_bar_region:
-                return HealthManaState(100.0, 100.0, False, False, False, False)
-            
-            # Extract HP region
-            x, y, w, h = self.hp_bar_region
-            hp_roi = screen[y:y+h, x:x+w]
-            hp_percentage = self._analyze_bar_region(hp_roi, 'red')
-            
-            # Extract mana region
-            x, y, w, h = self.mana_bar_region
-            mana_roi = screen[y:y+h, x:x+w]
-            mana_percentage = self._analyze_bar_region(mana_roi, 'blue')
-            
-            detected = hp_percentage is not None and mana_percentage is not None
-            
-            return HealthManaState(
-                health_percentage=hp_percentage or 100.0,
-                mana_percentage=mana_percentage or 100.0,
-                is_low_health=hp_percentage < self.low_health_threshold if hp_percentage else False,
-                is_low_mana=mana_percentage < self.low_mana_threshold if mana_percentage else False,
-                is_critical=hp_percentage < self.critical_health_threshold if hp_percentage else False,
-                detected=detected
-            )
-            
-        except Exception as e:
-            print(f"[HealthDetector] Region detection error: {e}")
-            return HealthManaState(100.0, 100.0, False, False, False, False)
+        # Redirect to the main detect method which has full functionality
+        return self.detect(screen)
     
     def _analyze_bar_region(self, roi: np.ndarray, color: str) -> Optional[float]:
-        """Analyze a bar region for fill percentage"""
-        if roi.size == 0:
-            return None
-        
-        # Convert to HSV
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        
-        # Create mask based on color
-        if color == 'red':
-            mask1 = cv2.inRange(hsv, self.hp_color_lower1, self.hp_color_upper1)
-            mask2 = cv2.inRange(hsv, self.hp_color_lower2, self.hp_color_upper2)
-            mask = cv2.bitwise_or(mask1, mask2)
-        else:  # blue
-            mask = cv2.inRange(hsv, self.mana_color_lower, self.mana_color_upper)
-        
-        return self._calculate_bar_percentage(mask, orientation='horizontal')
+        """Analyze a bar region for fill percentage (LEGACY - redirects to _analyze_bar_fill)"""
+        return self._analyze_bar_fill(roi, color)
     
     def _detect_by_template(self, screen: np.ndarray) -> HealthManaState:
         """
@@ -483,15 +443,15 @@ class HealthDetector:
         
         if manual_regions:
             self.hp_bar_region = manual_regions.get('hp_bar_region')
-            self.mana_bar_region = manual_regions.get('mana_bar_region')
+            self.xp_bar_region = manual_regions.get('xp_bar_region')
             print(f"  HP region: {self.hp_bar_region}")
-            print(f"  Mana region: {self.mana_bar_region}")
+            print(f"  XP region: {self.xp_bar_region}")
         else:
             # Auto-detect bars
             result = self._detect_by_color(screen)
             if result.detected:
                 print(f"  Auto-detected HP: {result.health_percentage:.1f}%")
-                print(f"  Auto-detected Mana: {result.mana_percentage:.1f}%")
+                print(f"  Auto-detected XP: {result.xp_percentage:.1f}%")
             else:
                 print("  Failed to auto-detect. Please provide manual regions.")
         
@@ -499,7 +459,7 @@ class HealthDetector:
     
     def visualize(self, screen: np.ndarray, state: HealthManaState) -> np.ndarray:
         """
-        Draw health/mana detection on screen for debugging
+        Draw health/XP detection on screen for debugging
         
         Args:
             screen: Original screen
@@ -514,14 +474,14 @@ class HealthDetector:
         if self.last_hp_region:
             x, y, w, h = self.last_hp_region
             cv2.rectangle(vis, (x, y), (x+w, y+h), (0, 0, 255), 2)
-            cv2.putText(vis, f"HP: {state.health_percentage:.1f}%", 
+            cv2.putText(vis, f"HP: {state.health_percentage:.1f}% ({state.health_current}/{state.health_max})", 
                        (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
         
-        # Draw mana bar region
-        if self.last_mana_region:
-            x, y, w, h = self.last_mana_region
+        # Draw XP bar region
+        if self.last_xp_region:
+            x, y, w, h = self.last_xp_region
             cv2.rectangle(vis, (x, y), (x+w, y+h), (255, 0, 0), 2)
-            cv2.putText(vis, f"Mana: {state.mana_percentage:.1f}%", 
+            cv2.putText(vis, f"XP: {state.xp_percentage:.1f}% ({state.xp_current}/{state.xp_max})", 
                        (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
         
         # Draw status
@@ -530,8 +490,7 @@ class HealthDetector:
             status_text.append("CRITICAL HP!")
         elif state.is_low_health:
             status_text.append("Low HP")
-        if state.is_low_mana:
-            status_text.append("Low Mana")
+        # XP doesn't have "low" warning, it just increases
         
         if status_text:
             cv2.putText(vis, " | ".join(status_text), (10, 30), 
