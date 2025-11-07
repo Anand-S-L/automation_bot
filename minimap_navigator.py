@@ -123,67 +123,132 @@ class MinimapPathFinder:
     
     def detect_paths(self, minimap: np.ndarray) -> np.ndarray:
         """
-        NEW APPROACH: Edge-based path detection using distance transform
-        This finds areas furthest from walls/obstacles = safe paths
-        Returns distance map: higher values = safer/wider paths
+        HYBRID APPROACH: Combines multiple detection methods
+        1. Edge detection + distance transform (geometric)
+        2. Texture analysis (smooth areas = paths)
+        3. Color variance (uniform areas = paths)
+        4. Local contrast (high contrast = boundaries)
+        Returns confidence map: higher values = more confident it's a path
         """
+        height, width = minimap.shape[:2]
+        
         # Convert to grayscale
         gray = cv2.cvtColor(minimap, cv2.COLOR_BGR2GRAY)
         
-        # Apply bilateral filter to reduce noise while preserving edges
+        # === METHOD 1: Edge-based distance transform ===
         denoised = cv2.bilateralFilter(gray, 9, 75, 75)
+        edges = cv2.Canny(denoised, 20, 60)  # Lower thresholds for more sensitivity
         
-        # Detect edges (walls, obstacles, terrain boundaries)
-        # Using Canny edge detection - this finds all boundaries
-        edges = cv2.Canny(denoised, 30, 100)
-        
-        # Dilate edges slightly to make walls thicker (safer navigation)
+        # Dilate edges to create obstacles
         kernel = np.ones((3, 3), np.uint8)
-        thick_edges = cv2.dilate(edges, kernel, iterations=2)
-        
-        # Invert: now edges are 0 (obstacles), open areas are 255
+        thick_edges = cv2.dilate(edges, kernel, iterations=1)
         inverted = cv2.bitwise_not(thick_edges)
         
-        # Distance Transform: each pixel gets value = distance to nearest edge
-        # Areas far from walls get high values = safe paths!
+        # Distance transform
         distance_map = cv2.distanceTransform(inverted, cv2.DIST_L2, 5)
+        cv2.normalize(distance_map, distance_map, 0, 1.0, cv2.NORM_MINMAX)
         
-        # Normalize to 0-255 range for visualization
-        cv2.normalize(distance_map, distance_map, 0, 255, cv2.NORM_MINMAX)
-        distance_map = np.uint8(distance_map)
+        # === METHOD 2: Texture variance (smooth = paths) ===
+        # Calculate local standard deviation - paths have low variance
+        blur = cv2.GaussianBlur(gray, (9, 9), 0)
+        texture_var = cv2.absdiff(gray, blur)
+        texture_var = cv2.GaussianBlur(texture_var, (9, 9), 0)
         
-        # Threshold to get only "safe" areas (far enough from walls)
-        # Higher threshold = only very safe areas, lower = more permissive
-        _, safe_paths = cv2.threshold(distance_map, 20, 255, cv2.THRESH_BINARY)
+        # Normalize and invert (low variance = high score)
+        cv2.normalize(texture_var, texture_var, 0, 1.0, cv2.NORM_MINMAX)
+        smooth_score = 1.0 - texture_var
         
-        return safe_paths
+        # === METHOD 3: Color uniformity ===
+        # Calculate color variance in local neighborhoods
+        color_var = np.zeros((height, width), dtype=np.float32)
+        for i, channel in enumerate(cv2.split(minimap)):
+            channel_float = channel.astype(np.float32)
+            mean = cv2.blur(channel_float, (9, 9))
+            diff = cv2.absdiff(channel_float, mean)
+            color_var += diff
+        
+        cv2.normalize(color_var, color_var, 0, 1.0, cv2.NORM_MINMAX)
+        color_score = 1.0 - color_var
+        
+        # === METHOD 4: Brightness-based (bright areas often = paths) ===
+        brightness_score = gray.astype(np.float32) / 255.0
+        
+        # === METHOD 5: Gradient magnitude (low gradient = flat paths) ===
+        grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+        gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+        cv2.normalize(gradient_magnitude, gradient_magnitude, 0, 1.0, cv2.NORM_MINMAX)
+        gradient_score = 1.0 - gradient_magnitude
+        
+        # === COMBINE ALL METHODS with weighted average ===
+        combined_score = (
+            distance_map * 0.35 +      # Distance from edges (most important)
+            smooth_score * 0.20 +       # Texture smoothness
+            color_score * 0.15 +        # Color uniformity
+            brightness_score * 0.15 +   # Brightness
+            gradient_score * 0.15       # Low gradient
+        )
+        
+        # Normalize to 0-255
+        combined_score = (combined_score * 255).astype(np.uint8)
+        
+        # Apply adaptive threshold to get binary mask
+        binary_paths = cv2.adaptiveThreshold(
+            combined_score, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+            cv2.THRESH_BINARY, 15, -5
+        )
+        
+        # Clean up noise
+        kernel = np.ones((3, 3), np.uint8)
+        binary_paths = cv2.morphologyEx(binary_paths, cv2.MORPH_CLOSE, kernel, iterations=2)
+        binary_paths = cv2.morphologyEx(binary_paths, cv2.MORPH_OPEN, kernel, iterations=1)
+        
+        # Save intermediate results for debugging
+        cv2.imwrite('debug_5_distance_map.png', (distance_map * 255).astype(np.uint8))
+        cv2.imwrite('debug_6_combined_score.png', combined_score)
+        
+        return binary_paths
     
     def detect_obstacles(self, minimap: np.ndarray) -> np.ndarray:
         """
-        NEW APPROACH: Edge-based obstacle detection
-        Detects walls, barriers, and impassable terrain
-        Returns binary mask: 255 = obstacle/wall, 0 = clear
+        HYBRID OBSTACLE DETECTION: Combines multiple methods
+        1. Strong edges (walls, boundaries)
+        2. Very dark areas (common for obstacles)
+        3. High texture variance (rough terrain)
+        4. Contrast changes (terrain boundaries)
+        Returns binary mask: 255 = obstacle, 0 = clear
         """
-        # Convert to grayscale
         gray = cv2.cvtColor(minimap, cv2.COLOR_BGR2GRAY)
         
-        # Denoise
+        # === METHOD 1: Edge detection (walls and boundaries) ===
         denoised = cv2.bilateralFilter(gray, 9, 75, 75)
+        edges = cv2.Canny(denoised, 20, 60)
         
-        # Detect edges - these are walls and obstacles
-        edges = cv2.Canny(denoised, 30, 100)
-        
-        # Make obstacles thicker for safety margin
+        # Thicken edges for safety
         kernel = np.ones((5, 5), np.uint8)
-        obstacles = cv2.dilate(edges, kernel, iterations=2)
+        thick_edges = cv2.dilate(edges, kernel, iterations=2)
         
-        # Also detect very dark areas (often obstacles in minimaps)
-        _, dark_areas = cv2.threshold(gray, 40, 255, cv2.THRESH_BINARY_INV)
+        # === METHOD 2: Very dark areas (often obstacles) ===
+        _, dark_areas = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)
         
-        # Combine edges and dark areas
-        combined_obstacles = cv2.bitwise_or(obstacles, dark_areas)
+        # === METHOD 3: High texture variance (rough/obstacle terrain) ===
+        blur = cv2.GaussianBlur(gray, (9, 9), 0)
+        texture_var = cv2.absdiff(gray, blur)
+        _, high_texture = cv2.threshold(texture_var, 30, 255, cv2.THRESH_BINARY)
         
-        return combined_obstacles
+        # === METHOD 4: Color saturation (some obstacles have distinct colors) ===
+        hsv = cv2.cvtColor(minimap, cv2.COLOR_BGR2HSV)
+        saturation = hsv[:, :, 1]
+        _, high_sat = cv2.threshold(saturation, 100, 255, cv2.THRESH_BINARY)
+        
+        # Combine all obstacle indicators
+        obstacles = cv2.bitwise_or(thick_edges, dark_areas)
+        obstacles = cv2.bitwise_or(obstacles, high_texture)
+        
+        # Clean up
+        obstacles = cv2.morphologyEx(obstacles, cv2.MORPH_CLOSE, kernel, iterations=1)
+        
+        return obstacles
     
     def find_path_direction(self, path_mask: np.ndarray, 
                            player_pos: Tuple[int, int],
