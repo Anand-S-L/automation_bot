@@ -427,7 +427,7 @@ class MinimapNavigator:
                 # Display info
                 path_type = "NARROW PATH" if analysis['narrow_path'] else "OPEN AREA"
                 safety = "✓ SAFE" if analysis['is_safe'] else "⚠ CAUTION"
-                clearness = max(self.path_finder.analyze_directions(analysis['path_mask'], 8)) if 'path_mask' in analysis else 0.5
+                clearness = analysis.get('clearness', 0.5)
                 print(f"{safety} | {path_type} | Target: {target_angle:.1f}° | Clearness: {clearness:.2f} | Frame: {frame_count}")
                 
                 # Adjust camera if needed (but not too often)
