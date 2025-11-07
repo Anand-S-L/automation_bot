@@ -256,12 +256,29 @@ class MinimapPathFinder:
         path_mask = self.detect_paths(minimap)
         obstacle_mask = self.detect_obstacles(minimap)
         
-        # Mask out the character indicator at center (yellow arrow + light cone)
-        # This prevents the bot from detecting the character's direction indicator as an obstacle
+        # Mask out the character indicator at center (yellow arrow + V-shaped light cone)
+        # The V-cone points upward (north) showing character's view direction
         center_x, center_y = player_pos
-        mask_radius = 20  # Adjust this if the character indicator is larger/smaller
-        cv2.circle(path_mask, (center_x, center_y), mask_radius, 0, -1)  # Fill with 0 (black)
-        cv2.circle(obstacle_mask, (center_x, center_y), mask_radius, 0, -1)  # Fill with 0 (black)
+        
+        # Create a triangular mask for the V-shaped cone pointing upward
+        cone_length = 40  # How far the cone extends upward
+        cone_width = 30   # Width of the cone at its widest point
+        
+        # Define triangle points: center bottom, top-left, top-right
+        triangle_points = np.array([
+            [center_x, center_y],                           # Bottom center (character position)
+            [center_x - cone_width//2, center_y - cone_length],  # Top-left
+            [center_x + cone_width//2, center_y - cone_length]   # Top-right
+        ], np.int32)
+        
+        # Fill the triangle with black (0) to mask it out
+        cv2.fillPoly(path_mask, [triangle_points], 0)
+        cv2.fillPoly(obstacle_mask, [triangle_points], 0)
+        
+        # Also mask the circular center (the arrow itself)
+        mask_radius = 15
+        cv2.circle(path_mask, (center_x, center_y), mask_radius, 0, -1)
+        cv2.circle(obstacle_mask, (center_x, center_y), mask_radius, 0, -1)
         
         # Try narrow path following first (more precise)
         narrow_path_angle = self.follow_narrow_path(path_mask, player_pos)
