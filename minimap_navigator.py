@@ -123,141 +123,45 @@ class MinimapPathFinder:
     
     def detect_paths(self, minimap: np.ndarray) -> np.ndarray:
         """
-        REVOLUTIONARY APPROACH: Watershed Segmentation + Super-Resolution
-        This mimics how autonomous vehicles see the world
+        SIMPLIFIED ROBUST APPROACH: Focus on what actually works
         
-        Steps:
-        1. Enhance minimap resolution and clarity
-        2. Segment into distinct regions (paths, obstacles, terrain)
-        3. Use watershed algorithm to find navigable corridors
-        4. Apply probabilistic path confidence
+        Key insight: Instead of trying to detect "paths" vs "obstacles",
+        just find WHERE THE PLAYER CAN GO by analyzing the minimap directly
         """
-        height, width = minimap.shape[:2]
+        gray = cv2.cvtColor(minimap, cv2.COLOR_BGR2GRAY)
         
-        # === STEP 1: Super-resolution enhancement ===
-        # Upscale for better feature detection
-        upscale_factor = 2
-        large = cv2.resize(minimap, (width * upscale_factor, height * upscale_factor), 
-                          interpolation=cv2.INTER_CUBIC)
+        # Step 1: Heavy denoising to remove minimap artifacts
+        denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
         
-        # Convert to LAB color space (better for perception)
-        lab = cv2.cvtColor(large, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
+        # Step 2: Simple approach - find areas that are NOT edges
+        # Edges = walls/obstacles, everything else = potentially walkable
+        edges = cv2.Canny(denoised, 50, 150)
         
-        # Enhance contrast dramatically
-        clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
-        l = clahe.apply(l)
-        enhanced = cv2.merge([l, a, b])
-        enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
+        # Step 3: Invert - non-edges are paths
+        paths = cv2.bitwise_not(edges)
         
-        gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
+        # Step 4: Distance transform - areas far from edges are safest
+        dist = cv2.distanceTransform(paths, cv2.DIST_L2, 5)
         
-        # === STEP 2: Multi-scale edge detection (finds paths at different scales) ===
-        edges_fine = cv2.Canny(gray, 10, 30)      # Fine details
-        edges_medium = cv2.Canny(gray, 30, 70)    # Medium structures
-        edges_coarse = cv2.Canny(gray, 70, 150)   # Major boundaries
+        # Step 5: Threshold based on distance - only keep areas with good clearance
+        # Normalize first
+        cv2.normalize(dist, dist, 0, 255, cv2.NORM_MINMAX)
+        dist = dist.astype(np.uint8)
         
-        # Combine multi-scale edges
-        edges_combined = cv2.bitwise_or(edges_fine, edges_medium)
-        edges_combined = cv2.bitwise_or(edges_combined, edges_coarse)
+        # Keep only areas with decent clearance (threshold = 15)
+        _, safe_paths = cv2.threshold(dist, 15, 255, cv2.THRESH_BINARY)
         
-        # === STEP 3: Morphological operations to find path corridors ===
-        kernel_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        kernel_large = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        # Step 6: Remove small noise
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        safe_paths = cv2.morphologyEx(safe_paths, cv2.MORPH_OPEN, kernel)
+        safe_paths = cv2.morphologyEx(safe_paths, cv2.MORPH_CLOSE, kernel)
         
-        # Close gaps in edges to form complete boundaries
-        edges_closed = cv2.morphologyEx(edges_combined, cv2.MORPH_CLOSE, kernel_small, iterations=2)
+        # Save for debugging
+        cv2.imwrite('debug_simple_edges.png', edges)
+        cv2.imwrite('debug_simple_distance.png', dist)
+        cv2.imwrite('debug_simple_paths.png', safe_paths)
         
-        # Dilate to create thick boundaries
-        boundaries = cv2.dilate(edges_closed, kernel_large, iterations=2)
-        
-        # === STEP 4: Distance Transform with multi-level thresholding ===
-        inverted = cv2.bitwise_not(boundaries)
-        dist_transform = cv2.distanceTransform(inverted, cv2.DIST_L2, 5)
-        
-        # Normalize distance
-        cv2.normalize(dist_transform, dist_transform, 0, 1.0, cv2.NORM_MINMAX)
-        
-        # === STEP 5: Watershed segmentation to separate regions ===
-        # Create markers for watershed
-        _, sure_fg = cv2.threshold(dist_transform, 0.3, 1.0, cv2.THRESH_BINARY)
-        sure_fg = (sure_fg * 255).astype(np.uint8)
-        
-        # Find unknown region
-        sure_bg = cv2.dilate(boundaries, kernel_large, iterations=1)
-        unknown = cv2.subtract(sure_bg, sure_fg)
-        
-        # Label markers
-        _, markers = cv2.connectedComponents(sure_fg)
-        markers = markers + 1
-        markers[unknown == 255] = 0
-        
-        # Apply watershed
-        watershed_input = cv2.cvtColor((gray * 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
-        markers = cv2.watershed(watershed_input, markers)
-        
-        # Extract navigable regions (not boundaries)
-        navigable = np.zeros_like(gray, dtype=np.uint8)
-        navigable[markers > 1] = 255
-        
-        # === STEP 6: Confidence-based path scoring ===
-        # Combine distance transform with navigable regions
-        confidence_map = dist_transform.copy()
-        confidence_map[markers == -1] = 0  # Boundaries get 0 confidence
-        confidence_map[navigable == 0] = confidence_map[navigable == 0] * 0.3  # Reduce non-navigable
-        
-        # === STEP 7: Gradient direction analysis (find flow direction) ===
-        # Paths have consistent gradient directions (like flow)
-        grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=5)
-        grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=5)
-        
-        # Calculate gradient coherence (consistent direction = path)
-        gradient_mag = np.sqrt(grad_x**2 + grad_y**2)
-        gradient_mag_blur = cv2.GaussianBlur(gradient_mag, (9, 9), 0)
-        
-        # Low gradient variance = path
-        gradient_coherence = 1.0 / (1.0 + gradient_mag_blur / (np.max(gradient_mag_blur) + 1e-5))
-        
-        # === STEP 8: Texture orientation analysis ===
-        # Use structure tensor to find oriented structures
-        Ixx = cv2.GaussianBlur(grad_x * grad_x, (5, 5), 1)
-        Iyy = cv2.GaussianBlur(grad_y * grad_y, (5, 5), 1)
-        Ixy = cv2.GaussianBlur(grad_x * grad_y, (5, 5), 1)
-        
-        # Calculate coherence (paths have high coherence)
-        coherence = ((Ixx - Iyy)**2 + 4*Ixy**2) / ((Ixx + Iyy)**2 + 1e-5)
-        coherence = np.sqrt(coherence)
-        
-        # === STEP 9: FINAL FUSION with adaptive weighting ===
-        final_score = (
-            confidence_map * 0.40 +           # Distance-based confidence (highest weight)
-            gradient_coherence * 0.25 +       # Gradient flow consistency
-            coherence * 0.20 +                # Structural coherence
-            (navigable / 255.0) * 0.15        # Watershed segmentation result
-        )
-        
-        # Downscale back to original size
-        final_score_resized = cv2.resize(final_score, (width, height), interpolation=cv2.INTER_AREA)
-        
-        # Convert to 8-bit
-        final_score_8bit = (final_score_resized * 255).astype(np.uint8)
-        
-        # Apply Otsu's automatic thresholding (finds optimal threshold automatically!)
-        _, binary_paths = cv2.threshold(final_score_8bit, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        
-        # Final cleanup with opening to remove noise
-        kernel_final = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        binary_paths = cv2.morphologyEx(binary_paths, cv2.MORPH_OPEN, kernel_final, iterations=1)
-        binary_paths = cv2.morphologyEx(binary_paths, cv2.MORPH_CLOSE, kernel_final, iterations=2)
-        
-        # === DEBUG OUTPUTS ===
-        cv2.imwrite('debug_5_enhanced.png', enhanced)
-        cv2.imwrite('debug_6_edges_multiscale.png', edges_combined)
-        cv2.imwrite('debug_7_distance_transform.png', (dist_transform * 255).astype(np.uint8))
-        cv2.imwrite('debug_8_watershed.png', (navigable))
-        cv2.imwrite('debug_9_final_confidence.png', final_score_8bit)
-        
-        return binary_paths
+        return safe_paths
     
     def detect_obstacles(self, minimap: np.ndarray) -> np.ndarray:
         """
@@ -300,30 +204,77 @@ class MinimapPathFinder:
                            player_pos: Tuple[int, int],
                            look_ahead: int) -> Optional[float]:
         """
-        Find best direction to move based on path analysis
-        Returns angle in degrees (0 = up/north, 90 = right/east, etc.)
+        IMPROVED: Vector field navigation
+        Finds the best direction by analyzing path density in sectors around player
         """
         height, width = path_mask.shape
         center_x, center_y = player_pos
         
-        # Analyze sectors around player (like a radar)
-        num_rays = 16  # Check 16 directions
-        best_angle = None
-        best_score = -1
+        # Define sectors to check (8 directions for simplicity and accuracy)
+        num_sectors = 8
+        sector_scores = []
+        sector_angles = []
         
-        for i in range(num_rays):
-            angle = (360 / num_rays) * i
+        for i in range(num_sectors):
+            angle_deg = i * (360 / num_sectors)
+            angle_rad = math.radians(angle_deg)
+            sector_angles.append(angle_deg)
+            
+            # Create a wedge-shaped mask for this sector
+            sector_mask = np.zeros((height, width), dtype=np.uint8)
+            
+            # Define sector as a triangle/wedge from player position
+            wedge_angle = 360 / num_sectors  # Width of each sector
+            start_angle = angle_deg - wedge_angle / 2
+            end_angle = angle_deg + wedge_angle / 2
+            
+            # Create points for the wedge
+            points = [player_pos]
+            for a in np.linspace(start_angle, end_angle, 20):
+                a_rad = math.radians(a)
+                # Point at edge of look_ahead distance
+                px = int(center_x + look_ahead * math.sin(a_rad))
+                py = int(center_y - look_ahead * math.cos(a_rad))
+                # Clip to image bounds
+                px = max(0, min(width - 1, px))
+                py = max(0, min(height - 1, py))
+                points.append((px, py))
+            
+            # Fill the wedge
+            if len(points) >= 3:
+                cv2.fillPoly(sector_mask, [np.array(points, dtype=np.int32)], 255)
+                
+                # Calculate how much "path" is in this sector
+                sector_path = cv2.bitwise_and(path_mask, sector_mask)
+                path_pixels = np.count_nonzero(sector_path)
+                total_pixels = np.count_nonzero(sector_mask)
+                
+                # Score = percentage of path in this sector
+                score = path_pixels / total_pixels if total_pixels > 0 else 0
+                sector_scores.append(score)
+            else:
+                sector_scores.append(0)
+        
+        # Find best direction
+        if max(sector_scores) < 0.1:  # Less than 10% path = probably stuck
+            return None
+        
+        best_idx = np.argmax(sector_scores)
+        best_angle = sector_angles[best_idx]
+        
+        # Debug: visualize sectors
+        debug_viz = cv2.cvtColor(path_mask, cv2.COLOR_GRAY2BGR)
+        for i, (angle, score) in enumerate(zip(sector_angles, sector_scores)):
             angle_rad = math.radians(angle)
-            
-            # Cast ray in this direction
-            ray_score = self._cast_ray(path_mask, center_x, center_y, 
-                                      angle_rad, look_ahead)
-            
-            if ray_score > best_score:
-                best_score = ray_score
-                best_angle = angle
+            # Draw arrow for each sector, color based on score
+            arrow_len = 30
+            end_x = int(center_x + arrow_len * math.sin(angle_rad))
+            end_y = int(center_y - arrow_len * math.cos(angle_rad))
+            color = (0, int(score * 255), 0) if i == best_idx else (0, 0, int(score * 255))
+            cv2.arrowedLine(debug_viz, player_pos, (end_x, end_y), color, 2)
+        cv2.imwrite('debug_sectors.png', debug_viz)
         
-        return best_angle if best_score > 0.3 else None
+        return best_angle
     
     def _cast_ray(self, path_mask: np.ndarray, start_x: int, start_y: int,
                   angle: float, distance: int) -> float:
@@ -532,18 +483,13 @@ class MinimapNavigator:
         else:
             keys_to_press = [direction]
         
-        # Press keys without releasing immediately for continuous movement
+        # Press all keys for this direction
         for key in keys_to_press:
             pyautogui.keyDown(key)
         
-        # Hold for movement duration
-        time.sleep(self.config.movement_duration)
-        
-        # Only release if we're not doing continuous movement
-        # Keys will be released before next direction or on stop
-        if not self.config.continuous_movement:
-            for key in keys_to_press:
-                pyautogui.keyUp(key)
+        # In continuous movement mode, we DON'T release keys here
+        # They stay pressed until direction changes or bot stops
+        # This creates smooth continuous movement instead of jerky press-release cycles
     
     def release_all_movement_keys(self):
         """Release all movement keys"""
