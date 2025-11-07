@@ -82,6 +82,14 @@ class MinimapCapture:
         screenshot = self.sct.grab(self.region)
         img = np.array(screenshot)
         img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+        
+        # Save first capture to verify we're capturing the right region
+        if not hasattr(self, '_saved_first'):
+            cv2.imwrite('VERIFY_CAPTURED_MINIMAP.png', img)
+            print(f"\n⚠ SAVED 'VERIFY_CAPTURED_MINIMAP.png' - Check if this is your minimap!")
+            print(f"   Capturing from: left={self.region['left']}, top={self.region['top']}, width={self.region['width']}, height={self.region['height']}")
+            self._saved_first = True
+        
         return img
     
     def preprocess(self, img: np.ndarray) -> np.ndarray:
