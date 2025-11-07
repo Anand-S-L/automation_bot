@@ -93,30 +93,31 @@ class FarmingAgent:
     The main RL agent that learns to farm
     """
     
-    # Action space - EXPANDED with camera controls
+    # Action space - EXPANDED with camera controls and loot collection
     ACTIONS = {
         # Movement (8 directions)
-        0: 'up',           # Move north
-        1: 'down',         # Move south
-        2: 'left',         # Move west
-        3: 'right',        # Move east
-        4: 'up+left',      # Move northwest
-        5: 'up+right',     # Move northeast
-        6: 'down+left',    # Move southwest
-        7: 'down+right',   # Move southeast
+        0: 'up',           # Move north (W key)
+        1: 'down',         # Move south (S key)
+        2: 'left',         # Move west (A key)
+        3: 'right',        # Move east (D key)
+        4: 'up+left',      # Move northwest (W+A)
+        5: 'up+right',     # Move northeast (W+D)
+        6: 'down+left',    # Move southwest (S+A)
+        7: 'down+right',   # Move southeast (S+D)
         
-        # Combat
-        8: 'attack',       # Attack nearest enemy
+        # Combat (Evil Lands specific)
+        8: 'attack',       # Spacebar - spam until red icon disappears
+        9: 'collect_loot', # B key - press after every kill
         
         # Camera control (numpad keys for Evil Lands)
-        9: 'look_left',    # Numpad 4 - Look left
-        10: 'look_right',  # Numpad 6 - Look right
-        11: 'look_up',     # Numpad 8 - Look up
-        12: 'look_down',   # Numpad 5 - Look down
+        10: 'look_left',    # Numpad 4 - Look left
+        11: 'look_right',   # Numpad 6 - Look right
+        12: 'look_up',      # Numpad 8 - Look up
+        13: 'look_down',    # Numpad 5 - Look down
         
         # Combined actions for efficiency
-        13: 'attack+look_left',   # Attack while adjusting camera left
-        14: 'attack+look_right',  # Attack while adjusting camera right
+        14: 'attack+move_forward',  # Attack while moving forward (spacebar + W)
+        15: 'attack+collect',       # Attack then immediately collect (spacebar + B)
     }
     
     def __init__(self, config_path='config_rl.json'):
@@ -261,7 +262,7 @@ class FarmingAgent:
                 return q_values.max(1)[1].item()
     
     def execute_action(self, action_id: int):
-        """Execute the selected action in the game"""
+        """Execute the selected action in the game (Evil Lands specific)"""
         action = self.ACTIONS[action_id]
         
         # Parse action components
@@ -269,8 +270,13 @@ class FarmingAgent:
         
         for part in action_parts:
             if part == 'attack':
-                # Press attack key (space bar for Evil Lands)
+                # Press attack key (space bar) - spam until red icon disappears
                 pyautogui.press('space')
+            
+            elif part == 'collect_loot':
+                # Press B key after kill to collect loot
+                pyautogui.press('b')
+                time.sleep(0.1)
                 
             elif part == 'look_left':
                 # Numpad 4 - Look left
@@ -287,6 +293,25 @@ class FarmingAgent:
             elif part == 'look_up':
                 # Numpad 8 - Look up
                 pyautogui.keyDown('num8')
+                time.sleep(0.15)
+                pyautogui.keyUp('num8')
+                
+            elif part == 'look_down':
+                # Numpad 5 - Look down
+                pyautogui.keyDown('num5')
+                time.sleep(0.15)
+                pyautogui.keyUp('num5')
+                
+            elif part == 'move_forward':
+                # W key - move forward
+                pyautogui.keyDown('w')
+                time.sleep(0.1)
+                pyautogui.keyUp('w')
+                
+            elif part == 'collect':
+                # Same as collect_loot
+                pyautogui.press('b')
+                time.sleep(0.1)
                 time.sleep(0.15)
                 pyautogui.keyUp('num8')
                 

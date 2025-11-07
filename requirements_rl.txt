@@ -1,4 +1,4 @@
-# Requirements for RL Farming Agent
+# Requirements for RL Farming Agent - State-of-the-Art Implementation
 
 # Deep Learning
 torch>=2.0.0
@@ -11,6 +11,14 @@ mss>=9.0.0
 pyautogui>=0.9.54
 pillow>=10.0.0
 
-# Optional but recommended for better performance
-# tensorboard>=2.14.0  # For training visualization
-# matplotlib>=3.7.0    # For plotting rewards
+# OCR for reward detection (CRITICAL for Phase 2)
+easyocr>=1.7.0  # Better accuracy, slower
+pytesseract>=0.3.10  # Faster, requires Tesseract installed
+
+# Monitoring & Training Visualization (ESSENTIAL)
+tensorboard>=2.14.0  # TensorBoard for training metrics
+wandb>=0.15.0  # Weights & Biases (optional, for cloud tracking)
+
+# Utilities
+tqdm>=4.66.0  # Progress bars
+matplotlib>=3.7.0  # Plotting
