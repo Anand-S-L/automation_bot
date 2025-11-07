@@ -44,7 +44,7 @@ class DQNetwork(nn.Module):
     - Fully connected layers for decision making
     """
     
-    def __init__(self, input_channels=3, num_actions=15):  # Updated to 15 actions
+    def __init__(self, input_channels=3, num_actions=16):  # Updated to 16 actions (0-15)
         super(DQNetwork, self).__init__()
         
         # Convolutional layers to process screen/minimap

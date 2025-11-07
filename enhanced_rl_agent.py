@@ -1,7 +1,47 @@
 """
-Updated RL Farming Agent with Full Perception System (Phase 2 Complete)
+Enhanced RL Farming Agent with Full Perception System (Phase 2 Complete)
 This file integrates all perception modules into the RL agent
+
+DEPENDENCIES - Run these commands first:
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+    pip install opencv-python numpy mss pyautogui pillow
+    pip install easyocr pytesseract
+    
+Or simply run:
+    pip install torch torchvision opencv-python numpy mss pyautogui pillow easyocr pytesseract
 """
+
+import sys
+import subprocess
+
+# Auto-install dependencies if missing
+def check_and_install_dependencies():
+    """Check and install required packages"""
+    required = {
+        'torch': 'torch',
+        'cv2': 'opencv-python',
+        'numpy': 'numpy',
+        'mss': 'mss',
+        'pyautogui': 'pyautogui',
+        'PIL': 'pillow',
+        'easyocr': 'easyocr'
+    }
+    
+    missing = []
+    for module, package in required.items():
+        try:
+            __import__(module)
+        except ImportError:
+            missing.append(package)
+    
+    if missing:
+        print(f"Missing packages: {missing}")
+        print("Installing dependencies...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing)
+        print("✓ Dependencies installed!")
+
+# Uncomment to auto-install (disabled by default)
+# check_and_install_dependencies()
 
 import torch
 import torch.nn as nn
@@ -89,7 +129,7 @@ class EnhancedDQNetwork(nn.Module):
     Combined → Q-values
     """
     
-    def __init__(self, num_actions=15):
+    def __init__(self, num_actions=16):  # 16 actions (0-15)
         super(EnhancedDQNetwork, self).__init__()
         
         # Visual stream (CNN)
@@ -101,7 +141,7 @@ class EnhancedDQNetwork(nn.Module):
         self.conv_output_size = 3136
         
         # State vector stream (FC layers)
-        self.state_fc1 = nn.Linear(11, 128)  # 11 state features
+        self.state_fc1 = nn.Linear(10, 128)  # 10 state features (removed is_low_mana)
         self.state_fc2 = nn.Linear(128, 256)
         
         # Combined stream
@@ -116,7 +156,7 @@ class EnhancedDQNetwork(nn.Module):
         
         Args:
             visual_input: (batch, 3, 84, 84) screen image
-            state_vector: (batch, 11) game state features
+            state_vector: (batch, 10) game state features (health, xp, enemies, combat, etc.)
         """
         # Visual stream
         x_vis = self.relu(self.conv1(visual_input))
@@ -143,6 +183,7 @@ class EnhancedFarmingAgent:
     
     # Action space (same as before)
     ACTIONS = {
+        # Movement (8 directions)
         0: {'name': 'forward', 'keys': ['w']},
         1: {'name': 'backward', 'keys': ['s']},
         2: {'name': 'left', 'keys': ['a']},
@@ -151,13 +192,20 @@ class EnhancedFarmingAgent:
         5: {'name': 'forward_right', 'keys': ['w', 'd']},
         6: {'name': 'backward_left', 'keys': ['s', 'a']},
         7: {'name': 'backward_right', 'keys': ['s', 'd']},
-        8: {'name': 'attack', 'keys': ['space']},
-        9: {'name': 'look_left', 'keys': ['num4']},
-        10: {'name': 'look_right', 'keys': ['num6']},
-        11: {'name': 'look_up', 'keys': ['num8']},
-        12: {'name': 'look_down', 'keys': ['num5']},
-        13: {'name': 'attack_look_left', 'keys': ['space', 'num4']},
-        14: {'name': 'attack_look_right', 'keys': ['space', 'num6']},
+        
+        # Combat (Evil Lands specific)
+        8: {'name': 'attack', 'keys': ['space']},          # Spam until red icon disappears
+        9: {'name': 'collect_loot', 'keys': ['b']},        # Press B after kill
+        
+        # Camera control
+        10: {'name': 'look_left', 'keys': ['num4']},
+        11: {'name': 'look_right', 'keys': ['num6']},
+        12: {'name': 'look_up', 'keys': ['num8']},
+        13: {'name': 'look_down', 'keys': ['num5']},
+        
+        # Combined actions for efficiency
+        14: {'name': 'attack_move_forward', 'keys': ['space', 'w']},  # Attack while moving
+        15: {'name': 'attack_collect', 'keys': ['space', 'b']},       # Attack then loot
     }
     
     def __init__(self, config_path: Optional[str] = "config_rl.json"):
