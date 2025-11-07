@@ -178,13 +178,28 @@ class FarmingAgent:
     
     def capture_game_state(self) -> GameState:
         """Capture current game state from screen"""
+        # Convert list format [left, top, width, height] to dict format for mss
+        game_region_dict = {
+            "left": self.game_region[0],
+            "top": self.game_region[1],
+            "width": self.game_region[2],
+            "height": self.game_region[3]
+        }
+        
+        minimap_region_dict = {
+            "left": self.minimap_region[0],
+            "top": self.minimap_region[1],
+            "width": self.minimap_region[2],
+            "height": self.minimap_region[3]
+        }
+        
         # Capture game screen
-        screenshot = self.sct.grab(self.game_region)
+        screenshot = self.sct.grab(game_region_dict)
         screen = np.array(screenshot)
         screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
         
         # Capture minimap
-        minimap_shot = self.sct.grab(self.minimap_region)
+        minimap_shot = self.sct.grab(minimap_region_dict)
         minimap = np.array(minimap_shot)
         minimap = cv2.cvtColor(minimap, cv2.COLOR_BGRA2BGR)
         
