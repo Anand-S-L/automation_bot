@@ -280,6 +280,15 @@ class MinimapPathFinder:
         cv2.circle(path_mask, (center_x, center_y), mask_radius, 0, -1)
         cv2.circle(obstacle_mask, (center_x, center_y), mask_radius, 0, -1)
         
+        # DEBUG: Save images to see what's being detected
+        # Create debug visualization
+        debug_minimap = minimap.copy()
+        cv2.drawContours(debug_minimap, [triangle_points], 0, (255, 0, 255), 2)  # Purple triangle
+        cv2.circle(debug_minimap, (center_x, center_y), mask_radius, (255, 0, 255), 2)  # Purple circle
+        cv2.imwrite('debug_minimap_with_mask.png', debug_minimap)
+        cv2.imwrite('debug_path_mask.png', path_mask)
+        cv2.imwrite('debug_obstacle_mask.png', obstacle_mask)
+        
         # Try narrow path following first (more precise)
         narrow_path_angle = self.follow_narrow_path(path_mask, player_pos)
         
@@ -467,7 +476,8 @@ class MinimapNavigator:
                 path_type = "NARROW PATH" if analysis['narrow_path'] else "OPEN AREA"
                 safety = "✓ SAFE" if analysis['is_safe'] else "⚠ CAUTION"
                 clearness = analysis.get('clearness', 0.5)
-                print(f"{safety} | {path_type} | Target: {target_angle:.1f}° | Clearness: {clearness:.2f} | Frame: {frame_count}")
+                direction = self.angle_to_direction(target_angle)
+                print(f"{safety} | {path_type} | Angle: {target_angle:.1f}° | Direction: {direction} | Clearness: {clearness:.2f} | Frame: {frame_count}")
                 
                 # Adjust camera if needed (but not too often)
                 if frame_count % 3 == 0:  # Only check camera every 3 frames
