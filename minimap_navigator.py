@@ -371,8 +371,8 @@ class MinimapPathFinder:
         cv2.fillPoly(path_mask, [triangle_points], 0)
         cv2.fillPoly(obstacle_mask, [triangle_points], 0)
         
-        # Also mask the circular center (the arrow itself)
-        mask_radius = 15
+        # Also mask the circular center (the arrow itself) - BIGGER to cover the V-cone fully
+        mask_radius = 25  # Increased from 15
         cv2.circle(path_mask, (center_x, center_y), mask_radius, 0, -1)
         cv2.circle(obstacle_mask, (center_x, center_y), mask_radius, 0, -1)
         
@@ -392,16 +392,10 @@ class MinimapPathFinder:
         edges = cv2.Canny(gray, 30, 100)
         cv2.imwrite('debug_4_detected_edges.png', edges)
         
-        # Try narrow path following first (more precise)
-        narrow_path_angle = self.follow_narrow_path(path_mask, player_pos)
-        
-        # If no narrow path, use general direction finding
-        if narrow_path_angle is None:
-            general_angle = self.find_path_direction(
-                path_mask, player_pos, self.config.look_ahead_distance
-            )
-        else:
-            general_angle = narrow_path_angle
+        # ONLY use sector-based direction finding (simpler and more reliable)
+        general_angle = self.find_path_direction(
+            path_mask, player_pos, self.config.look_ahead_distance
+        )
         
         # Calculate clearness score if we have an angle
         clearness = 0.0
@@ -415,7 +409,7 @@ class MinimapPathFinder:
         
         return {
             'recommended_angle': general_angle,
-            'narrow_path': narrow_path_angle is not None,
+            'narrow_path': False,  # We removed narrow path detection for simplicity
             'path_mask': path_mask,
             'obstacle_mask': obstacle_mask,
             'is_safe': safety_check,
@@ -578,15 +572,18 @@ class MinimapNavigator:
                     last_direction = None
                     continue
                 
-                # Display info
-                path_type = "NARROW PATH" if analysis['narrow_path'] else "OPEN AREA"
+                # Display info with MORE detail
+                path_type = "SECTOR" if not analysis['narrow_path'] else "NARROW"
                 safety = "✓ SAFE" if analysis['is_safe'] else "⚠ CAUTION"
                 clearness = analysis.get('clearness', 0.5)
                 direction = self.angle_to_direction(target_angle)
-                print(f"{safety} | {path_type} | Angle: {target_angle:.1f}° | Direction: {direction} | Clearness: {clearness:.2f} | Frame: {frame_count}")
+                
+                # Show which keys are actually being pressed
+                keys = direction.replace('+', ' + ')
+                print(f"Frame {frame_count} | {safety} | Angle: {target_angle:5.1f}° | Keys: {keys:15s} | Clear: {clearness:.2f}")
                 
                 # Adjust camera if needed (but not too often)
-                if frame_count % 3 == 0:  # Only check camera every 3 frames
+                if frame_count % 5 == 0:  # Only check camera every 5 frames (less frequent)
                     self.adjust_camera(target_angle)
                 
                 # Get movement direction
@@ -594,16 +591,17 @@ class MinimapNavigator:
                 
                 # Only change keys if direction changed (for continuous movement)
                 if direction != last_direction:
+                    print(f"  → Direction changed: {last_direction} → {direction}")
                     # Release old keys before pressing new ones
                     self.release_all_movement_keys()
-                    time.sleep(0.05)  # Small delay for key release
+                    time.sleep(0.1)  # Slightly longer delay for key release
                     
-                # Move in recommended direction
-                self.move_direction(direction)
-                last_direction = direction
+                    # Press new direction
+                    self.move_direction(direction)
+                    last_direction = direction
                 
                 # Debug visualization
-                if debug:
+                if debug and frame_count % 10 == 0:  # Only save debug every 10 frames to reduce lag
                     self._show_debug(minimap, analysis, target_angle)
                 
                 # Check if stuck (but less aggressively)
