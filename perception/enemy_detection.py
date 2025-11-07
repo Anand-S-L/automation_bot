@@ -442,7 +442,10 @@ class EnemyDetector:
                 
                 enemies.append(Enemy(
                     position=(cx, cy),  # Minimap coordinates
+                    hp_current=0,       # Can't detect from minimap
+                    hp_max=0,           # Can't detect from minimap
                     hp_percentage=None,  # Can't detect from minimap
+                    has_attack_icon=False,  # Can't detect from minimap
                     is_targeted=False,
                     distance_score=distance_score,
                     bbox=(x, y, w, h)
