@@ -123,132 +123,178 @@ class MinimapPathFinder:
     
     def detect_paths(self, minimap: np.ndarray) -> np.ndarray:
         """
-        HYBRID APPROACH: Combines multiple detection methods
-        1. Edge detection + distance transform (geometric)
-        2. Texture analysis (smooth areas = paths)
-        3. Color variance (uniform areas = paths)
-        4. Local contrast (high contrast = boundaries)
-        Returns confidence map: higher values = more confident it's a path
+        REVOLUTIONARY APPROACH: Watershed Segmentation + Super-Resolution
+        This mimics how autonomous vehicles see the world
+        
+        Steps:
+        1. Enhance minimap resolution and clarity
+        2. Segment into distinct regions (paths, obstacles, terrain)
+        3. Use watershed algorithm to find navigable corridors
+        4. Apply probabilistic path confidence
         """
         height, width = minimap.shape[:2]
         
-        # Convert to grayscale
-        gray = cv2.cvtColor(minimap, cv2.COLOR_BGR2GRAY)
+        # === STEP 1: Super-resolution enhancement ===
+        # Upscale for better feature detection
+        upscale_factor = 2
+        large = cv2.resize(minimap, (width * upscale_factor, height * upscale_factor), 
+                          interpolation=cv2.INTER_CUBIC)
         
-        # === METHOD 1: Edge-based distance transform ===
-        denoised = cv2.bilateralFilter(gray, 9, 75, 75)
-        edges = cv2.Canny(denoised, 20, 60)  # Lower thresholds for more sensitivity
+        # Convert to LAB color space (better for perception)
+        lab = cv2.cvtColor(large, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
         
-        # Dilate edges to create obstacles
-        kernel = np.ones((3, 3), np.uint8)
-        thick_edges = cv2.dilate(edges, kernel, iterations=1)
-        inverted = cv2.bitwise_not(thick_edges)
+        # Enhance contrast dramatically
+        clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        enhanced = cv2.merge([l, a, b])
+        enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
         
-        # Distance transform
-        distance_map = cv2.distanceTransform(inverted, cv2.DIST_L2, 5)
-        cv2.normalize(distance_map, distance_map, 0, 1.0, cv2.NORM_MINMAX)
+        gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
         
-        # === METHOD 2: Texture variance (smooth = paths) ===
-        # Calculate local standard deviation - paths have low variance
-        blur = cv2.GaussianBlur(gray, (9, 9), 0)
-        texture_var = cv2.absdiff(gray, blur)
-        texture_var = cv2.GaussianBlur(texture_var, (9, 9), 0)
+        # === STEP 2: Multi-scale edge detection (finds paths at different scales) ===
+        edges_fine = cv2.Canny(gray, 10, 30)      # Fine details
+        edges_medium = cv2.Canny(gray, 30, 70)    # Medium structures
+        edges_coarse = cv2.Canny(gray, 70, 150)   # Major boundaries
         
-        # Normalize and invert (low variance = high score)
-        cv2.normalize(texture_var, texture_var, 0, 1.0, cv2.NORM_MINMAX)
-        smooth_score = 1.0 - texture_var
+        # Combine multi-scale edges
+        edges_combined = cv2.bitwise_or(edges_fine, edges_medium)
+        edges_combined = cv2.bitwise_or(edges_combined, edges_coarse)
         
-        # === METHOD 3: Color uniformity ===
-        # Calculate color variance in local neighborhoods
-        color_var = np.zeros((height, width), dtype=np.float32)
-        for i, channel in enumerate(cv2.split(minimap)):
-            channel_float = channel.astype(np.float32)
-            mean = cv2.blur(channel_float, (9, 9))
-            diff = cv2.absdiff(channel_float, mean)
-            color_var += diff
+        # === STEP 3: Morphological operations to find path corridors ===
+        kernel_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        kernel_large = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
         
-        cv2.normalize(color_var, color_var, 0, 1.0, cv2.NORM_MINMAX)
-        color_score = 1.0 - color_var
+        # Close gaps in edges to form complete boundaries
+        edges_closed = cv2.morphologyEx(edges_combined, cv2.MORPH_CLOSE, kernel_small, iterations=2)
         
-        # === METHOD 4: Brightness-based (bright areas often = paths) ===
-        brightness_score = gray.astype(np.float32) / 255.0
+        # Dilate to create thick boundaries
+        boundaries = cv2.dilate(edges_closed, kernel_large, iterations=2)
         
-        # === METHOD 5: Gradient magnitude (low gradient = flat paths) ===
-        grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-        grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-        gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-        cv2.normalize(gradient_magnitude, gradient_magnitude, 0, 1.0, cv2.NORM_MINMAX)
-        gradient_score = 1.0 - gradient_magnitude
+        # === STEP 4: Distance Transform with multi-level thresholding ===
+        inverted = cv2.bitwise_not(boundaries)
+        dist_transform = cv2.distanceTransform(inverted, cv2.DIST_L2, 5)
         
-        # === COMBINE ALL METHODS with weighted average ===
-        combined_score = (
-            distance_map * 0.35 +      # Distance from edges (most important)
-            smooth_score * 0.20 +       # Texture smoothness
-            color_score * 0.15 +        # Color uniformity
-            brightness_score * 0.15 +   # Brightness
-            gradient_score * 0.15       # Low gradient
+        # Normalize distance
+        cv2.normalize(dist_transform, dist_transform, 0, 1.0, cv2.NORM_MINMAX)
+        
+        # === STEP 5: Watershed segmentation to separate regions ===
+        # Create markers for watershed
+        _, sure_fg = cv2.threshold(dist_transform, 0.3, 1.0, cv2.THRESH_BINARY)
+        sure_fg = (sure_fg * 255).astype(np.uint8)
+        
+        # Find unknown region
+        sure_bg = cv2.dilate(boundaries, kernel_large, iterations=1)
+        unknown = cv2.subtract(sure_bg, sure_fg)
+        
+        # Label markers
+        _, markers = cv2.connectedComponents(sure_fg)
+        markers = markers + 1
+        markers[unknown == 255] = 0
+        
+        # Apply watershed
+        watershed_input = cv2.cvtColor((gray * 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
+        markers = cv2.watershed(watershed_input, markers)
+        
+        # Extract navigable regions (not boundaries)
+        navigable = np.zeros_like(gray, dtype=np.uint8)
+        navigable[markers > 1] = 255
+        
+        # === STEP 6: Confidence-based path scoring ===
+        # Combine distance transform with navigable regions
+        confidence_map = dist_transform.copy()
+        confidence_map[markers == -1] = 0  # Boundaries get 0 confidence
+        confidence_map[navigable == 0] = confidence_map[navigable == 0] * 0.3  # Reduce non-navigable
+        
+        # === STEP 7: Gradient direction analysis (find flow direction) ===
+        # Paths have consistent gradient directions (like flow)
+        grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=5)
+        grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=5)
+        
+        # Calculate gradient coherence (consistent direction = path)
+        gradient_mag = np.sqrt(grad_x**2 + grad_y**2)
+        gradient_mag_blur = cv2.GaussianBlur(gradient_mag, (9, 9), 0)
+        
+        # Low gradient variance = path
+        gradient_coherence = 1.0 / (1.0 + gradient_mag_blur / (np.max(gradient_mag_blur) + 1e-5))
+        
+        # === STEP 8: Texture orientation analysis ===
+        # Use structure tensor to find oriented structures
+        Ixx = cv2.GaussianBlur(grad_x * grad_x, (5, 5), 1)
+        Iyy = cv2.GaussianBlur(grad_y * grad_y, (5, 5), 1)
+        Ixy = cv2.GaussianBlur(grad_x * grad_y, (5, 5), 1)
+        
+        # Calculate coherence (paths have high coherence)
+        coherence = ((Ixx - Iyy)**2 + 4*Ixy**2) / ((Ixx + Iyy)**2 + 1e-5)
+        coherence = np.sqrt(coherence)
+        
+        # === STEP 9: FINAL FUSION with adaptive weighting ===
+        final_score = (
+            confidence_map * 0.40 +           # Distance-based confidence (highest weight)
+            gradient_coherence * 0.25 +       # Gradient flow consistency
+            coherence * 0.20 +                # Structural coherence
+            (navigable / 255.0) * 0.15        # Watershed segmentation result
         )
         
-        # Normalize to 0-255
-        combined_score = (combined_score * 255).astype(np.uint8)
+        # Downscale back to original size
+        final_score_resized = cv2.resize(final_score, (width, height), interpolation=cv2.INTER_AREA)
         
-        # Apply adaptive threshold to get binary mask
-        binary_paths = cv2.adaptiveThreshold(
-            combined_score, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-            cv2.THRESH_BINARY, 15, -5
-        )
+        # Convert to 8-bit
+        final_score_8bit = (final_score_resized * 255).astype(np.uint8)
         
-        # Clean up noise
-        kernel = np.ones((3, 3), np.uint8)
-        binary_paths = cv2.morphologyEx(binary_paths, cv2.MORPH_CLOSE, kernel, iterations=2)
-        binary_paths = cv2.morphologyEx(binary_paths, cv2.MORPH_OPEN, kernel, iterations=1)
+        # Apply Otsu's automatic thresholding (finds optimal threshold automatically!)
+        _, binary_paths = cv2.threshold(final_score_8bit, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
-        # Save intermediate results for debugging
-        cv2.imwrite('debug_5_distance_map.png', (distance_map * 255).astype(np.uint8))
-        cv2.imwrite('debug_6_combined_score.png', combined_score)
+        # Final cleanup with opening to remove noise
+        kernel_final = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        binary_paths = cv2.morphologyEx(binary_paths, cv2.MORPH_OPEN, kernel_final, iterations=1)
+        binary_paths = cv2.morphologyEx(binary_paths, cv2.MORPH_CLOSE, kernel_final, iterations=2)
+        
+        # === DEBUG OUTPUTS ===
+        cv2.imwrite('debug_5_enhanced.png', enhanced)
+        cv2.imwrite('debug_6_edges_multiscale.png', edges_combined)
+        cv2.imwrite('debug_7_distance_transform.png', (dist_transform * 255).astype(np.uint8))
+        cv2.imwrite('debug_8_watershed.png', (navigable))
+        cv2.imwrite('debug_9_final_confidence.png', final_score_8bit)
         
         return binary_paths
     
     def detect_obstacles(self, minimap: np.ndarray) -> np.ndarray:
         """
-        HYBRID OBSTACLE DETECTION: Combines multiple methods
-        1. Strong edges (walls, boundaries)
-        2. Very dark areas (common for obstacles)
-        3. High texture variance (rough terrain)
-        4. Contrast changes (terrain boundaries)
-        Returns binary mask: 255 = obstacle, 0 = clear
+        ADVANCED OBSTACLE DETECTION: Multi-scale analysis
+        Uses the same upscaling approach for consistency
         """
-        gray = cv2.cvtColor(minimap, cv2.COLOR_BGR2GRAY)
+        height, width = minimap.shape[:2]
         
-        # === METHOD 1: Edge detection (walls and boundaries) ===
-        denoised = cv2.bilateralFilter(gray, 9, 75, 75)
-        edges = cv2.Canny(denoised, 20, 60)
+        # Upscale for better detection
+        upscale_factor = 2
+        large = cv2.resize(minimap, (width * upscale_factor, height * upscale_factor), 
+                          interpolation=cv2.INTER_CUBIC)
         
-        # Thicken edges for safety
-        kernel = np.ones((5, 5), np.uint8)
-        thick_edges = cv2.dilate(edges, kernel, iterations=2)
+        gray = cv2.cvtColor(large, cv2.COLOR_BGR2GRAY)
         
-        # === METHOD 2: Very dark areas (often obstacles) ===
-        _, dark_areas = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)
+        # Multi-scale edge detection for obstacles
+        edges_fine = cv2.Canny(gray, 30, 90)
+        edges_coarse = cv2.Canny(gray, 70, 150)
+        edges = cv2.bitwise_or(edges_fine, edges_coarse)
         
-        # === METHOD 3: High texture variance (rough/obstacle terrain) ===
-        blur = cv2.GaussianBlur(gray, (9, 9), 0)
-        texture_var = cv2.absdiff(gray, blur)
-        _, high_texture = cv2.threshold(texture_var, 30, 255, cv2.THRESH_BINARY)
+        # Thicken edges significantly for safety
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        thick_edges = cv2.dilate(edges, kernel, iterations=3)
         
-        # === METHOD 4: Color saturation (some obstacles have distinct colors) ===
-        hsv = cv2.cvtColor(minimap, cv2.COLOR_BGR2HSV)
-        saturation = hsv[:, :, 1]
-        _, high_sat = cv2.threshold(saturation, 100, 255, cv2.THRESH_BINARY)
+        # Very dark areas
+        _, dark = cv2.threshold(gray, 60, 255, cv2.THRESH_BINARY_INV)
         
-        # Combine all obstacle indicators
-        obstacles = cv2.bitwise_or(thick_edges, dark_areas)
-        obstacles = cv2.bitwise_or(obstacles, high_texture)
+        # Combine
+        obstacles = cv2.bitwise_or(thick_edges, dark)
         
         # Clean up
-        obstacles = cv2.morphologyEx(obstacles, cv2.MORPH_CLOSE, kernel, iterations=1)
+        obstacles = cv2.morphologyEx(obstacles, cv2.MORPH_CLOSE, kernel, iterations=2)
         
-        return obstacles
+        # Downscale back
+        obstacles_resized = cv2.resize(obstacles, (width, height), interpolation=cv2.INTER_AREA)
+        
+        return obstacles_resized
     
     def find_path_direction(self, path_mask: np.ndarray, 
                            player_pos: Tuple[int, int],
