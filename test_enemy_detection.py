@@ -12,9 +12,17 @@ from perception.enemy_detection import EnemyDetector
 with open('config_spatial.json', 'r') as f:
     config = json.load(f)
 
+# Ensure enemy_detection has game_region and minimap_region
+enemy_config = config.get('enemy_detection', {})
+if 'game_region' not in enemy_config:
+    enemy_config['game_region'] = config.get('game_region', [0, 0, 1920, 1080])
+if 'minimap_region' not in enemy_config:
+    enemy_config['minimap_region'] = config.get('minimap_region', [1670, 50, 200, 200])
+
 # Initialize detector
 print("Initializing enemy detector...")
-detector = EnemyDetector(config.get('enemy_detection', {}))
+print(f"Config: {enemy_config}")
+detector = EnemyDetector(enemy_config)
 
 print("\nStarting detection test...")
 print("Press 'q' to quit")

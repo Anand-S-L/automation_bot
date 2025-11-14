@@ -1015,8 +1015,16 @@ class EnhancedFarmingAgent:
         
         # Initialize perception modules
         print("  Initializing perception systems...")
+        
+        # Ensure perception modules have access to game_region and minimap_region
+        enemy_config = self.config.get('enemy_detection', {})
+        if 'game_region' not in enemy_config:
+            enemy_config['game_region'] = self.config.get('game_region', [0, 0, 1920, 1080])
+        if 'minimap_region' not in enemy_config:
+            enemy_config['minimap_region'] = self.config.get('minimap_region', [1670, 50, 200, 200])
+        
         self.health_detector = HealthDetector(self.config.get('health_detection'))
-        self.enemy_detector = EnemyDetector(self.config.get('enemy_detection'))
+        self.enemy_detector = EnemyDetector(enemy_config)
         self.reward_detector = RewardDetector(self.config.get('reward_detection'))
         
         # Initialize spatial memory and navigation (NEW)
@@ -1111,7 +1119,15 @@ class EnhancedFarmingAgent:
         try:
             with open(config_path, 'r') as f:
                 user_config = json.load(f)
-                default_config.update(user_config)
+                # Deep merge: update top-level and nested configs
+                for key, value in user_config.items():
+                    if key in default_config and isinstance(default_config[key], dict) and isinstance(value, dict):
+                        # Merge nested dictionaries
+                        default_config[key].update(value)
+                    else:
+                        # Replace top-level values
+                        default_config[key] = value
+                print(f"  Config loaded from {config_path}")
         except FileNotFoundError:
             print(f"  Config not found, using defaults (spatial memory enabled)")
         
