@@ -1084,6 +1084,13 @@ class EnhancedFarmingAgent:
         self.patrol_points = []  # High-value patrol points
         self.last_position_check = time.time()
         
+        # Action history and stuck prevention (NEW)
+        self.action_history = deque(maxlen=10)  # Last 10 actions
+        self.position_history = deque(maxlen=5)  # Last 5 positions
+        self.stuck_counter = 0  # Consecutive stuck detections
+        self.last_position = (0.0, 0.0)
+        self.position_update_time = time.time()
+        
         # TensorBoard (if available)
         try:
             from torch.utils.tensorboard import SummaryWriter
@@ -1369,6 +1376,48 @@ class EnhancedFarmingAgent:
         
         This adds game-specific logic on top of RL with intelligent pathfinding
         """
+        # === PRIORITY 0: Stuck Detection and Prevention (NEW) ===
+        
+        # Check if we're stuck (position not changing)
+        current_pos = state.current_position
+        if len(self.position_history) >= 5:
+            # Calculate position variance over last 5 states
+            recent_positions = list(self.position_history)
+            pos_variance = np.var([p[0] for p in recent_positions]) + np.var([p[1] for p in recent_positions])
+            
+            # If position barely changed, we're stuck
+            if pos_variance < 0.5:
+                self.stuck_counter += 1
+                print(f"[WARNING] Stuck detected! Counter: {self.stuck_counter}, variance: {pos_variance:.3f}")
+                
+                # If stuck for multiple frames, perform unstuck maneuver
+                if self.stuck_counter >= 3:
+                    print("[UNSTUCK] Executing escape maneuver...")
+                    return self._get_unstuck_action(state)
+            else:
+                # Reset stuck counter if moving normally
+                self.stuck_counter = 0
+        
+        # Track current position
+        self.position_history.append(current_pos)
+        
+        # Prevent repetitive backward movement
+        if len(self.action_history) >= 3:
+            recent_actions = list(self.action_history)[-3:]
+            # If last 3 actions were backward (action 1), force different action
+            if recent_actions.count(1) >= 3:
+                print("[WARNING] Repetitive backward movement detected, forcing forward")
+                self.action_history.append(0)  # Record forward
+                return 0  # Force forward
+            
+            # If same action repeated 4+ times, randomize
+            if len(set(recent_actions)) == 1 and len(self.action_history) >= 4:
+                if list(self.action_history)[-4:].count(recent_actions[0]) >= 4:
+                    print(f"[WARNING] Action {recent_actions[0]} repeated 4+ times, randomizing")
+                    new_action = np.random.choice([0, 2, 3, 4, 5])  # Forward, left, right, diagonals
+                    self.action_history.append(new_action)
+                    return new_action
+        
         # === PRIORITY 1: Safety and Combat (unchanged) ===
         
         # CRITICAL: If very low health, run away using pathfinding!
@@ -1481,7 +1530,11 @@ class EnhancedFarmingAgent:
             
             # Get Q-values
             q_values = self.policy_net(visual, state_vector)
-            return q_values.argmax().item()
+            action = q_values.argmax().item()
+            
+            # Record action in history
+            self.action_history.append(action)
+            return action
     
     def _get_navigation_target(self, state: EnhancedGameState) -> Optional[Tuple[float, float]]:
         """
@@ -1643,6 +1696,62 @@ class EnhancedFarmingAgent:
         
         # If all random movements hit obstacles, move forward
         return 0
+    
+    def _get_unstuck_action(self, state: EnhancedGameState) -> int:
+        """
+        Get intelligent action to escape stuck state
+        
+        Args:
+            state: Current game state
+            
+        Returns:
+            Action to escape
+        """
+        # Cancel any ongoing navigation
+        self.navigator.cancel_navigation()
+        
+        # Mark current area as problematic
+        self.spatial_memory.update_position(state.current_position, is_obstacle=True)
+        
+        # Strategy 1: Try opposite of last action
+        if len(self.action_history) > 0:
+            last_action = self.action_history[-1]
+            # Opposite movements
+            opposites = {
+                0: 1,  # forward -> backward
+                1: 0,  # backward -> forward
+                2: 3,  # left -> right
+                3: 2,  # right -> left
+                4: 7,  # forward_left -> backward_right
+                5: 6,  # forward_right -> backward_left
+                6: 5,  # backward_left -> forward_right
+                7: 4,  # backward_right -> forward_left
+            }
+            if last_action in opposites:
+                opposite = opposites[last_action]
+                print(f"  Trying opposite of last action: {self.ACTIONS[opposite]['name']}")
+                self.action_history.append(opposite)
+                return opposite
+        
+        # Strategy 2: Find direction with fewest obstacles
+        best_action = 0
+        min_obstacles = float('inf')
+        
+        for action_id in [0, 1, 2, 3, 4, 5, 6, 7]:  # All movement actions
+            test_pos = self._estimate_next_position(state.current_position, action_id)
+            obstacles = self._count_nearby_obstacles(test_pos, radius=10.0)
+            
+            if obstacles < min_obstacles:
+                min_obstacles = obstacles
+                best_action = action_id
+        
+        print(f"  Best escape direction: {self.ACTIONS[best_action]['name']} (obstacles: {min_obstacles})")
+        
+        # Reset stuck counter after unstuck action
+        self.stuck_counter = 0
+        self.action_history.append(best_action)
+        
+        return best_action
     
     def _estimate_next_position(self, current_pos: Tuple[float, float], action: int) -> Tuple[float, float]:
         """
