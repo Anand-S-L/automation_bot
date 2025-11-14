@@ -5,12 +5,10 @@ Contains all game state detection modules
 
 from .health_detection import HealthDetector
 from .enemy_detection import EnemyDetector
-from .loot_detection import LootDetector
 from .reward_detection import RewardDetector
 
 __all__ = [
     'HealthDetector',
     'EnemyDetector', 
-    'LootDetector',
     'RewardDetector'
 ]
