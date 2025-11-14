@@ -13,6 +13,16 @@
   "spatial_memory_file": "spatial_memory.pkl",
   "movement_speed": 5.0,
   "health_detection": {},
-  "enemy_detection": {},
+  "enemy_detection": {
+    "detection_method": "hybrid",
+    "use_detection_region": true,
+    "detection_region_percent": 0.7,
+    "minimap_prefilter": true,
+    "game_region": [0, 0, 1920, 1080],
+    "minimap_region": [1670, 50, 200, 200],
+    "use_ocr": true,
+    "min_hp_bar_area": 50,
+    "max_hp_bar_area": 5000
+  },
   "reward_detection": {}
 }

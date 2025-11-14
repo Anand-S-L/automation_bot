@@ -95,8 +95,20 @@ class EnemyDetector:
         self.max_hp_bar_area = self.config.get('max_hp_bar_area', 5000)
         self.min_hp_bar_aspect = 2.0  # HP bars are horizontal
         
+        # Game region (full screen dimensions from config)
+        self.game_region = self.config.get('game_region', [0, 0, 1920, 1080])
+        self.screen_width = self.game_region[2]
+        self.screen_height = self.game_region[3]
+        
+        # Detection region optimization (scan center area, not entire screen)
+        self.use_detection_region = self.config.get('use_detection_region', True)
+        self.detection_region_percent = self.config.get('detection_region_percent', 0.7)  # Center 70% of screen
+        
         # Minimap config
         self.minimap_region = self.config.get('minimap_region', [1670, 50, 200, 200])
+        
+        # Smart scanning: use minimap to decide if full scan needed
+        self.minimap_prefilter = self.config.get('minimap_prefilter', True)
         
         # OCR for reading HP numbers
         self.use_ocr = self.config.get('use_ocr', True)
@@ -110,6 +122,9 @@ class EnemyDetector:
         
         print(f"[EnemyDetector] Initialized with method: {self.detection_method}")
         print(f"[EnemyDetector] OCR enabled: {self.use_ocr}")
+        print(f"[EnemyDetector] Game region: {self.screen_width}x{self.screen_height}")
+        print(f"[EnemyDetector] Detection region: {self.detection_region_percent*100:.0f}% of screen (optimized)")
+        print(f"[EnemyDetector] Minimap pre-filter: {self.minimap_prefilter}")
     
     def _init_ocr(self):
         """Initialize OCR for reading HP numbers in bars"""
@@ -141,17 +156,36 @@ class EnemyDetector:
         """
         self.frame_count += 1
         
+        # Smart scanning: check minimap first to avoid unnecessary full scans
+        if self.minimap_prefilter and self.detection_method == 'hybrid':
+            mm = minimap if minimap is not None else self._extract_minimap(screen)
+            mm_enemies = self._detect_by_minimap(mm)
+            
+            # If no enemies on minimap, skip expensive screen scanning
+            if len(mm_enemies) == 0:
+                return EnemyState(
+                    enemies=[],
+                    enemy_count=0,
+                    has_target=False,
+                    nearest_enemy=None,
+                    avg_distance=0.0,
+                    detected=False
+                )
+        
+        # Get detection region (cropped screen for faster processing)
+        detection_screen, offset = self._get_detection_region(screen)
+        
         if self.detection_method == 'hp_bars':
-            enemies = self._detect_by_hp_bars(screen)
+            enemies = self._detect_by_hp_bars(detection_screen, offset)
         elif self.detection_method == 'attack_icon':
-            enemies = self._detect_by_attack_icon(screen)
+            enemies = self._detect_by_attack_icon(detection_screen, offset)
         elif self.detection_method == 'minimap':
-            enemies = self._detect_by_minimap(minimap or self._extract_minimap(screen))
+            enemies = self._detect_by_minimap(minimap if minimap is not None else self._extract_minimap(screen))
         elif self.detection_method == 'hybrid':
             # Combine multiple methods
-            hp_enemies = self._detect_by_hp_bars(screen)
-            icon_enemies = self._detect_by_attack_icon(screen)
-            mm_enemies = self._detect_by_minimap(minimap or self._extract_minimap(screen))
+            hp_enemies = self._detect_by_hp_bars(detection_screen, offset)
+            icon_enemies = self._detect_by_attack_icon(detection_screen, offset)
+            mm_enemies = self._detect_by_minimap(minimap if minimap is not None else self._extract_minimap(screen))
             enemies = self._merge_detections(hp_enemies, icon_enemies, mm_enemies)
         else:
             enemies = []
@@ -174,9 +208,40 @@ class EnemyDetector:
             detected=enemy_count > 0
         )
     
-    def _detect_by_hp_bars(self, screen: np.ndarray) -> List[Enemy]:
+    def _get_detection_region(self, screen: np.ndarray) -> Tuple[np.ndarray, Tuple[int, int]]:
+        """
+        Get optimized detection region (center portion of screen)
+        
+        Args:
+            screen: Full screen
+            
+        Returns:
+            (cropped_screen, (offset_x, offset_y))
+        """
+        if not self.use_detection_region:
+            return screen, (0, 0)
+        
+        height, width = screen.shape[:2]
+        
+        # Calculate center region
+        region_width = int(width * self.detection_region_percent)
+        region_height = int(height * self.detection_region_percent)
+        
+        offset_x = (width - region_width) // 2
+        offset_y = (height - region_height) // 2
+        
+        # Crop to center region
+        cropped = screen[offset_y:offset_y+region_height, offset_x:offset_x+region_width]
+        
+        return cropped, (offset_x, offset_y)
+    
+    def _detect_by_hp_bars(self, screen: np.ndarray, offset: Tuple[int, int] = (0, 0)) -> List[Enemy]:
         """
         Detect enemies by finding HP bars (red, white, or transparent) with numbers
+        
+        Args:
+            screen: Screen region to scan (may be cropped)
+            offset: (x, y) offset to convert local coords to full screen coords
         
         Evil Lands HP bars can be:
         - Red colored
@@ -185,6 +250,7 @@ class EnemyDetector:
         But all have health numbers in the middle (e.g. "50/100")
         """
         try:
+            offset_x, offset_y = offset
             # Convert to HSV
             hsv = cv2.cvtColor(screen, cv2.COLOR_BGR2HSV)
             
@@ -239,11 +305,12 @@ class EnemyDetector:
                     hp_percentage = None
                 
                 # Enemy position is below HP bar (approximate)
-                enemy_x = x + w // 2
-                enemy_y = y + h + 30  # Estimate enemy is 30px below bar
+                # Add offset to convert back to full screen coordinates
+                enemy_x = x + w // 2 + offset_x
+                enemy_y = y + h + 30 + offset_y  # Estimate enemy is 30px below bar
                 
                 # Estimate distance (enemies closer = lower on screen usually)
-                distance_score = enemy_y / screen_height
+                distance_score = enemy_y / self.screen_height
                 
                 enemies.append(Enemy(
                     position=(enemy_x, enemy_y),
@@ -253,7 +320,7 @@ class EnemyDetector:
                     has_attack_icon=False,  # Will be set by attack icon detection
                     is_targeted=False,
                     distance_score=distance_score,
-                    bbox=(x, y, w, h)
+                    bbox=(x + offset_x, y + offset_y, w, h)  # Adjust bbox to full screen coords
                 ))
             
             return enemies
@@ -319,14 +386,19 @@ class EnemyDetector:
         except:
             return ""
     
-    def _detect_by_attack_icon(self, screen: np.ndarray) -> List[Enemy]:
+    def _detect_by_attack_icon(self, screen: np.ndarray, offset: Tuple[int, int] = (0, 0)) -> List[Enemy]:
         """
         Detect enemies by red attack icon (appears when pressing spacebar)
+        
+        Args:
+            screen: Screen region to scan (may be cropped)
+            offset: (x, y) offset to convert local coords to full screen coords
         
         This is the most reliable way to find actively attacked enemies.
         The red icon appears above the enemy when you attack.
         """
         try:
+            offset_x, offset_y = offset
             # Convert to HSV
             hsv = cv2.cvtColor(screen, cv2.COLOR_BGR2HSV)
             
@@ -353,11 +425,12 @@ class EnemyDetector:
                 x, y, w, h = cv2.boundingRect(contour)
                 
                 # Enemy is below the icon
-                enemy_x = x + w // 2
-                enemy_y = y + h + 20  # Icon is above enemy
+                # Add offset to convert back to full screen coordinates
+                enemy_x = x + w // 2 + offset_x
+                enemy_y = y + h + 20 + offset_y  # Icon is above enemy
                 
-                # Distance estimate
-                distance_score = enemy_y / screen_height
+                # Distance estimate (use configured screen height for consistency)
+                distance_score = enemy_y / self.screen_height
                 
                 enemies.append(Enemy(
                     position=(enemy_x, enemy_y),
@@ -367,7 +440,7 @@ class EnemyDetector:
                     has_attack_icon=True,  # This enemy is being attacked!
                     is_targeted=True,
                     distance_score=distance_score,
-                    bbox=(x, y, w, h)
+                    bbox=(x + offset_x, y + offset_y, w, h)  # Adjust bbox to full screen coords
                 ))
             
             return enemies
