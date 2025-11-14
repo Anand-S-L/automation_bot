@@ -64,12 +64,16 @@ while True:
         offset_x = (width - region_width) // 2
         offset_y = (height - region_height) // 2
         
+        # Ensure within bounds
+        offset_x = max(0, min(offset_x, width - region_width))
+        offset_y = max(0, min(offset_y, height - region_height))
+        
         # Draw detection region boundary
         cv2.rectangle(vis, (offset_x, offset_y), 
                      (offset_x + region_width, offset_y + region_height),
                      (255, 255, 0), 3)
-        cv2.putText(vis, "Detection Region", (offset_x + 10, offset_y + 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+        cv2.putText(vis, "Detection Region (Optimized Scan Area)", (offset_x + 10, offset_y + 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
     
     # Draw minimap region
     cv2.rectangle(vis, (mx, my), (mx+mw, my+mh), (0, 255, 255), 2)

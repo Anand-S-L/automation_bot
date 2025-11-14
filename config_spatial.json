@@ -12,7 +12,11 @@
   "cell_size": 5.0,
   "spatial_memory_file": "spatial_memory.pkl",
   "movement_speed": 5.0,
-  "health_detection": {},
+  "health_detection": {
+    "game_region": [0, 0, 1920, 1080],
+    "use_detection_region": true,
+    "detection_region_percent": 0.8
+  },
   "enemy_detection": {
     "detection_method": "hybrid",
     "use_detection_region": true,
@@ -24,5 +28,10 @@
     "min_hp_bar_area": 50,
     "max_hp_bar_area": 5000
   },
-  "reward_detection": {}
+  "reward_detection": {
+    "game_region": [0, 0, 1920, 1080],
+    "use_detection_region": true,
+    "detection_region_percent": 0.8,
+    "use_ocr": true
+  }
 }

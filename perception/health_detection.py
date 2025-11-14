@@ -72,6 +72,15 @@ class HealthDetector:
         self.low_health_threshold = self.config.get('low_health_threshold', 30)
         self.critical_health_threshold = self.config.get('critical_health_threshold', 15)
         
+        # Game region (from config)
+        self.game_region = self.config.get('game_region', [0, 0, 1920, 1080])
+        self.screen_width = self.game_region[2]
+        self.screen_height = self.game_region[3]
+        
+        # Detection region optimization (health bars are at top, so scan top portion only)
+        self.use_detection_region = self.config.get('use_detection_region', True)
+        self.detection_region_percent = self.config.get('detection_region_percent', 0.8)  # Top 80%
+        
         # OCR setup for reading numbers
         self.use_ocr = self.config.get('use_ocr', True)
         self.ocr_reader = None
@@ -86,8 +95,10 @@ class HealthDetector:
         self.last_xp_region = None  # Changed from last_mana_region
         
         print(f"[HealthDetector] Initialized with mode: {self.detection_mode}")
+        print(f"[HealthDetector] Game region: {self.screen_width}x{self.screen_height}")
         print(f"[HealthDetector] HP bar region: {self.hp_bar_region}")
         print(f"[HealthDetector] XP bar region: {self.xp_bar_region}")
+        print(f"[HealthDetector] Detection region: {'ON' if self.use_detection_region else 'OFF'} ({self.detection_region_percent*100:.0f}%)")
     
     def _init_ocr(self):
         """Initialize OCR for reading HP/XP numbers"""

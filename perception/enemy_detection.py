@@ -213,7 +213,7 @@ class EnemyDetector:
         Get optimized detection region (center portion of screen)
         
         Args:
-            screen: Full screen
+            screen: Full screen (already cropped to game_region by agent)
             
         Returns:
             (cropped_screen, (offset_x, offset_y))
@@ -223,12 +223,17 @@ class EnemyDetector:
         
         height, width = screen.shape[:2]
         
-        # Calculate center region
+        # Calculate center region based on actual screen dimensions
         region_width = int(width * self.detection_region_percent)
         region_height = int(height * self.detection_region_percent)
         
+        # Center the detection region
         offset_x = (width - region_width) // 2
         offset_y = (height - region_height) // 2
+        
+        # Ensure offsets are within bounds
+        offset_x = max(0, min(offset_x, width - region_width))
+        offset_y = max(0, min(offset_y, height - region_height))
         
         # Crop to center region
         cropped = screen[offset_y:offset_y+region_height, offset_x:offset_x+region_width]

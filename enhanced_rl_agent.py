@@ -1016,16 +1016,24 @@ class EnhancedFarmingAgent:
         # Initialize perception modules
         print("  Initializing perception systems...")
         
-        # Ensure perception modules have access to game_region and minimap_region
+        # Ensure all perception modules have access to game_region and minimap_region
+        health_config = self.config.get('health_detection', {})
+        if 'game_region' not in health_config:
+            health_config['game_region'] = self.config.get('game_region', [0, 0, 1920, 1080])
+        
         enemy_config = self.config.get('enemy_detection', {})
         if 'game_region' not in enemy_config:
             enemy_config['game_region'] = self.config.get('game_region', [0, 0, 1920, 1080])
         if 'minimap_region' not in enemy_config:
             enemy_config['minimap_region'] = self.config.get('minimap_region', [1670, 50, 200, 200])
         
-        self.health_detector = HealthDetector(self.config.get('health_detection'))
+        reward_config = self.config.get('reward_detection', {})
+        if 'game_region' not in reward_config:
+            reward_config['game_region'] = self.config.get('game_region', [0, 0, 1920, 1080])
+        
+        self.health_detector = HealthDetector(health_config)
         self.enemy_detector = EnemyDetector(enemy_config)
-        self.reward_detector = RewardDetector(self.config.get('reward_detection'))
+        self.reward_detector = RewardDetector(reward_config)
         
         # Initialize spatial memory and navigation (NEW)
         print("  Initializing spatial memory and navigation...")

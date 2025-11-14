@@ -72,6 +72,15 @@ class RewardDetector:
         if self.use_ocr:
             self._init_ocr()
         
+        # Game region (from config)
+        self.game_region = self.config.get('game_region', [0, 0, 1920, 1080])
+        self.screen_width = self.game_region[2]
+        self.screen_height = self.game_region[3]
+        
+        # Detection region optimization (notifications/damage typically in center/top)
+        self.use_detection_region = self.config.get('use_detection_region', True)
+        self.detection_region_percent = self.config.get('detection_region_percent', 0.8)  # Center 80%
+        
         # Screen regions
         self.notification_region = self.config.get('notification_region', [600, 100, 720, 200])
         self.damage_regions = self.config.get('damage_regions', [
@@ -95,6 +104,8 @@ class RewardDetector:
         self.frame_count = 0
         
         print(f"[RewardDetector] Initialized (OCR: {self.use_ocr}, Engine: {self.ocr_engine})")
+        print(f"[RewardDetector] Game region: {self.screen_width}x{self.screen_height}")
+        print(f"[RewardDetector] Detection region: {'ON' if self.use_detection_region else 'OFF'} ({self.detection_region_percent*100:.0f}%)")
     
     def _init_ocr(self):
         """Initialize OCR engine"""
