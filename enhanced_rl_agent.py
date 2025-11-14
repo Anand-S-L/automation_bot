@@ -2078,37 +2078,35 @@ class EnhancedFarmingAgent:
             True if death screen detected
         """
         try:
-            # Method 1: Check if screen is mostly dark (death overlay)
-            gray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
-            mean_brightness = np.mean(gray)
+            # Method 1: Check if HP is 0 (most reliable)
+            if hasattr(self, 'health_detector'):
+                health_state = self.health_detector.detect(screen)
+                if health_state.health_percentage <= 0 and health_state.health_current <= 0:
+                    # HP is 0, likely dead
+                    return True
             
-            # Death screens are usually darker
-            if mean_brightness < 50:  # Very dark
-                return True
+            # Method 2: Check for death event in reward detector (very reliable)
+            if hasattr(self, 'reward_detector'):
+                recent_deaths = sum(1 for e in self.reward_detector.event_history 
+                                  if e.event_type == 'death' and time.time() - e.timestamp < 3.0)
+                if recent_deaths > 0:
+                    return True
             
-            # Method 2: Check for large dark overlay (center area)
-            h, w = gray.shape
-            center_region = gray[h//4:3*h//4, w//4:3*w//4]
-            center_brightness = np.mean(center_region)
-            
-            if center_brightness < 40:
-                return True
-            
-            # Method 3: Check for "Respawn" or "You Died" text (OCR if available)
+            # Method 3: Check for "Respawn" or "You Died" text (OCR - strict check)
             if hasattr(self, 'reward_detector') and self.reward_detector.use_ocr:
+                gray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
+                h, w = gray.shape
+                
                 # Check center area for death text
                 center_img = screen[h//3:2*h//3, w//3:2*w//3]
                 text = self.reward_detector._run_ocr(center_img).lower()
                 
-                death_keywords = ['respawn', 'you died', 'dead', 'defeat', 'revive']
+                # Strict keywords - must match exactly
+                death_keywords = ['respawn', 'you died', 'you are dead', 'press to revive']
                 if any(keyword in text for keyword in death_keywords):
                     return True
             
-            # Method 4: Check if HP is 0 (from health detector)
-            if hasattr(self, 'health_detector'):
-                health_state = self.health_detector.detect(screen)
-                if health_state.health_percentage <= 0 or health_state.health_current <= 0:
-                    return True
+            # Method 4: REMOVED - brightness check too unreliable (dark areas trigger false positives)
             
             return False
             
