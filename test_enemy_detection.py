@@ -35,14 +35,22 @@ print("Press 'd' to toggle detection region visualization")
 print("\n")
 
 sct = mss.mss()
-monitor = sct.monitors[1]
+
+# Use game region from config, not full monitor
+game_region = config['game_region']
+game_region_dict = {
+    "left": game_region[0],
+    "top": game_region[1],
+    "width": game_region[2],
+    "height": game_region[3]
+}
 
 show_debug = True
 frame_count = 0
 
 while True:
-    # Capture screen
-    screenshot = sct.grab(monitor)
+    # Capture screen using game region
+    screenshot = sct.grab(game_region_dict)
     screen = np.array(screenshot)
     screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
     
